@@ -1,15 +1,38 @@
-from typing import Union
+from typing import Optional
 
 from fastapi import FastAPI
+from pydantic import BaseModel
+
+from prisma import Prisma
 
 app = FastAPI()
 
 
+class CreatePostDto(BaseModel):
+    title: str
+    content: Optional[str] = None
+    published: bool
+
+
 @app.get("/")
-def read_root():
-    return {"Hello": "World"}
+def list_posts():
+    db = Prisma()
+    db.connect()
+
+    posts = db.post.find_many()
+
+    db.disconnect()
+
+    return posts
 
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Union[str, None] = None):
-    return {"item_id": item_id, "q": q}
+@app.post("/")
+def create_post(dto: CreatePostDto):
+    db = Prisma()
+    db.connect()
+
+    post = db.post.create(data=dto.model_dump(exclude_none=True))
+
+    db.disconnect()
+
+    return post
