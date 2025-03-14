@@ -1,38 +1,15 @@
-from typing import Optional
-
 from fastapi import FastAPI
-from pydantic import BaseModel
+from api import router
+from api.models.db import db
 
-from prisma import Prisma
+app = FastAPI(title="Diploma Project")
 
-app = FastAPI()
+@app.on_event("startup")
+async def startup():
+    await db.connect()
 
+@app.on_event("shutdown")
+async def shutdown():
+    await db.disconnect()
 
-class CreatePostDto(BaseModel):
-    title: str
-    content: Optional[str] = None
-    published: bool
-
-
-@app.get("/")
-def list_posts():
-    db = Prisma()
-    db.connect()
-
-    posts = db.post.find_many()
-
-    db.disconnect()
-
-    return posts
-
-
-@app.post("/")
-def create_post(dto: CreatePostDto):
-    db = Prisma()
-    db.connect()
-
-    post = db.post.create(data=dto.model_dump(exclude_none=True))
-
-    db.disconnect()
-
-    return post
+app.include_router(router)
