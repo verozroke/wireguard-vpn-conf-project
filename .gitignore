@@ -1,1 +1,52 @@
-.env
+# Python
+
+**/__pycache__/
+__pycache__/
+*.py[cod]
+*.so
+*.log
+*.sqlite3
+*.db
+*.pyo
+
+# Virtual environment
+venv/
+.env/
+.env.local
+.env.*.local
+*.venv
+Pipfile
+Pipfile.lock
+poetry.lock
+
+# Editor & System files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Prisma
+prisma/migrations/
+prisma/db.sqlite
+prisma/.cache
+
+# Docker
+*.dockerignore
+docker-compose.override.yml
+
+# FastAPI & Uvicorn logs
+logs/
+*.log
+*.pid
+*.seed
+*.bak
+
+# Pytest & Coverage
+.coverage
+htmlcov/
+*.pytest_cache
+nosetests.xml
+coverage.xml
+*.cover
