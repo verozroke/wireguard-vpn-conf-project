@@ -3,6 +3,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
+
 // Prisma Client Generator
 generator client {
   provider             = "prisma-client-py"
@@ -12,12 +14,12 @@ generator client {
 
 // Модель пользователя
 model User {
-  id        String   @id @default(uuid())
-  login     String   @unique
-  password  String
-  clientId  Int
-  subnets   Subnet[]
-  role      Role
+  id       String   @id @default(uuid())
+  login    String   @unique
+  password String
+  clientId Int
+  subnets  Subnet[]
+  role     Role
 }
 
 enum Role {
@@ -27,7 +29,7 @@ enum Role {
 
 // Модель подсети
 model Subnet {
-  id         String    @id @default(uuid())
+  id         String   @id @default(uuid())
   name       String
   subnetIp   String
   subnetMask Int // (0-32)
@@ -38,12 +40,12 @@ model Subnet {
 
 // Модель клиента
 model Client {
-  id             String  @id @default(uuid())
-  name           String
-  clientIp       String
-  publicKey      String
-  privateKeyRef  String
-  isEnabled      Boolean @default(true)
+  id            String  @id @default(uuid())
+  name          String
+  clientIp      String
+  publicKey     String
+  privateKeyRef String
+  isEnabled     Boolean @default(true)
   subnet        Subnet  @relation(fields: [subnetId], references: [id])
   subnetId      String
 }
