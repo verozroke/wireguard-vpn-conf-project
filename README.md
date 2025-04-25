@@ -72,16 +72,3 @@ prisma generate
 ```bash
 prisma studio
 ```
-
----
-
-# ✅ Notes
-
-- Always activate your virtual environment before running the dev server or managing dependencies.
-- Always format your code before pushing changes.
-- Use Prisma commands carefully to avoid overwriting database structure.
-
----
-
-Хочешь — ещё могу дополнить в конец файл раздел "Project Structure", где будет описание папок (`api/`, `models/`, `routes/`, `dependencies/`).  
-Скажешь — добавлю сразу. 🚀
