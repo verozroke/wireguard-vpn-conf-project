@@ -18,7 +18,7 @@ from tempfile import NamedTemporaryFile
 from ..models.schemas import ClientResponse
 from ..dependencies.auth import require_admin
 from ..models.db import db  # Импортируем Prisma db
-
+from starlette.background import BackgroundTask
 router = APIRouter()
 
 
@@ -30,9 +30,8 @@ async def get_clients():
     try:
         # Получаем всех клиентов из базы данных
         clients = await db.client.find_many()
-        if not clients:
-            raise HTTPException(status_code=404, detail="No clients found")
-        return clients
+        
+        return [] if not clients else clients
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching clients: {str(e)}")
 
@@ -43,13 +42,12 @@ async def get_client(client_id: UUID):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": client_id})
+        client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
         return client
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching client: {str(e)}")
-
 
 @router.get("/{client_id}/qrcode")
 async def get_client_qrcode(client_id: UUID):
@@ -58,7 +56,7 @@ async def get_client_qrcode(client_id: UUID):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": client_id})
+        client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
@@ -89,8 +87,6 @@ async def get_client_qrcode(client_id: UUID):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating QR code: {str(e)}")
 
-
-
 @router.get("/{client_id}/configuration")
 async def get_client_configuration(client_id: UUID):
     """
@@ -98,7 +94,7 @@ async def get_client_configuration(client_id: UUID):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": client_id})
+        client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
@@ -111,26 +107,30 @@ async def get_client_configuration(client_id: UUID):
         file_name = f"configuration_{subnet.name}_{client.name}.conf"
 
         # Создаем временный файл
-        with NamedTemporaryFile(delete=False, mode="w", suffix=".conf") as temp_file:
-            temp_file_path = temp_file.name
+        temp_file = NamedTemporaryFile(delete=False, mode="w", suffix=".conf")
+        temp_file_path = temp_file.name
+        try:
             # TODO: change to the real configuration text
-            temp_file.write("Заглушка")  # Пока текст "Заглушка"
+            temp_file.write("Zaglushka")  # Пока текст "Заглушка"
+        finally:
+            temp_file.close()
 
-        # Отправляем файл в качестве ответа
-        response = FileResponse(path=temp_file_path, filename=file_name, media_type="text/plain")
+        # Создаем фоновую задачу на удаление файла после отправки
+        background_task = BackgroundTask(os.remove, temp_file_path)
 
-        # После отправки файла удаляем временный файл
-        os.remove(temp_file_path)
-
-        return response
+        # Отправляем файл и привязываем удаление после отправки
+        return FileResponse(
+            path=temp_file_path,
+            filename=file_name,
+            media_type="text/plain",
+            background=background_task
+        )
 
     except Exception as e:
         # В случае ошибки, если файл был создан, удаляем его
         if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
         raise HTTPException(status_code=500, detail=f"Error generating configuration file: {str(e)}")
-
-
 
 @router.post("/", response_model=ClientResponse)
 async def create_client(client: ClientCreate):
@@ -139,9 +139,11 @@ async def create_client(client: ClientCreate):
     """
     try:
         # Проверяем существование подсети
-        subnet = await db.subnet.find_unique(where={"id": client.subnetId})
+        subnet = await db.subnet.find_unique(where={"id": str(client.subnetId)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
+        # TODO: нужно добавить проверку на то является ли айпи клиента частью айпи нашей подсети (также не заменяет ли он адрес подсети и его броадкаст)
+        # TODO: добавь валидацию того то что айпи должен быть корректным
         public_key = 'zaglushka'
         private_key_ref = 'zaglushka'
         # TODO: make that client publicKeyRef and privateKeyRef will be created before saving him to conf file
@@ -172,7 +174,7 @@ async def enable_client(data: ClientEnableDisable ):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": data.clientId})
+        client = await db.client.find_unique(where={"id": str(data.clientId)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
         
@@ -182,24 +184,24 @@ async def enable_client(data: ClientEnableDisable ):
         # TODO: Add client as PEER to the configuration
         # Активируем клиента (изменяем флаг isEnabled на True)
         updated_client = await db.client.update(
-            where={"id": data.clientId},
+            where={"id": str(data.clientId)},
             data={"isEnabled": True}
         )
 
-        return {"clientId": updated_client.clientId, "status": "enabled"}
+        return {"clientId": updated_client.id, "status": "enabled"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error enabling client: {str(e)}")
 
 
 @router.post("/{client_id}/disable", dependencies=[Depends(require_admin)])
-async def disable_client(data: ClientEnableDisable,  ):
+async def disable_client(data: ClientEnableDisable):
     """
     Отключить клиента (Только для администраторов).
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": data.clientId})
+        client = await db.client.find_unique(where={"id": str(data.clientId)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
@@ -209,25 +211,24 @@ async def disable_client(data: ClientEnableDisable,  ):
         # TODO: Remove client as PEER to the configuration
         # Деактивируем клиента (изменяем флаг isEnabled на False)
         updated_client = await db.client.update(
-            where={"id": data.clientId},
+            where={"id": str(data.clientId)},
             data={"isEnabled": False}
         )
 
-        return {"clientId": updated_client.clientId, "status": "disabled"}
+        return {"clientId": updated_client.id, "status": "disabled"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error disabling client: {str(e)}")
 
 
-
 @router.put("/{client_id}/name", response_model=ClientResponse, dependencies=[Depends(require_admin)])
-async def update_client_name(client_id: UUID, data: ClientUpdateName ):
+async def update_client_name(client_id: UUID, data: ClientUpdateName):
     """
     Обновить имя клиента (Только для администраторов).
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": client_id})
+        client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
@@ -237,7 +238,7 @@ async def update_client_name(client_id: UUID, data: ClientUpdateName ):
 
         # Обновляем имя клиента в базе данных
         updated_client = await db.client.update(
-            where={"id": client_id},
+            where={"id": str(client_id)},
             data={"name": data.name}
         )
 
@@ -254,7 +255,7 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress ):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": client_id})
+        client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
@@ -263,9 +264,10 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress ):
             raise HTTPException(status_code=400, detail="New IP address is the same as the current IP address")
 
         # TODO: update the IP-address of the PEER in the configuration file
+        # TODO: добавь валидацию того то что айпи должен быть корректным и часть подсети его же подсети
         # Обновляем IP-адрес клиента в базе данных
         updated_client = await db.client.update(
-            where={"id": client_id},
+            where={"id": str(client_id)},
             data={"clientIp": data.clientIp}
         )
 
@@ -281,16 +283,16 @@ async def delete_client(client_id: UUID ):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": client_id})
+        client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
         # TODO: delete the client PEER from configuration file
         # Удаляем клиента из базы данных
-        await db.client.delete(where={"id": client_id})
+        await db.client.delete(where={"id": str(client_id)})
 
 
-        return {"clientId": client_id, "status": "deleted"}
+        return {"clientId": str(client_id), "status": "deleted"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting client: {str(e)}")

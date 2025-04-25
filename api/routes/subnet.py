@@ -15,9 +15,7 @@ async def get_subnets():
     try:
         # Получаем все подсети из базы данных
         subnets = await db.subnet.find_many()
-        if not subnets:
-            raise HTTPException(status_code=404, detail="No subnets found")
-        return subnets
+        return [] if not subnets else subnets
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching subnets: {str(e)}")
@@ -30,7 +28,7 @@ async def get_subnet(subnet_id: UUID):
     """
     try:
         # Ищем подсеть по ID
-        subnet = await db.subnet.find_unique(where={"id": subnet_id})
+        subnet = await db.subnet.find_unique(where={"id": str(subnet_id)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
         return subnet
@@ -53,9 +51,9 @@ async def create_subnet(data: SubnetCreate):
         existing_subnet = await db.subnet.find_unique(where={"subnetIp": data.subnetIp})
         if existing_subnet:
             raise HTTPException(status_code=400, detail="Subnet with this IP already exists")
-
+        # TODO: добавь валидацию того то что айпи должен быть корректным
         # Проверка существования подсети с таким же именем
-        existing_name_subnet = await db.subnet.find_unique(where={"name": data.name})
+        existing_name_subnet = await db.subnet.find_first(where={"name": data.name})
         if existing_name_subnet:
             raise HTTPException(status_code=400, detail="Subnet with this name already exists")
 
@@ -84,7 +82,7 @@ async def update_subnet_name(subnet_id: UUID, data: SubnetUpdateName):
     """
     try:
         # Проверяем существование подсети
-        subnet = await db.subnet.find_unique(where={"id": subnet_id})
+        subnet = await db.subnet.find_unique(where={"id": str(subnet_id)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
 
@@ -94,7 +92,7 @@ async def update_subnet_name(subnet_id: UUID, data: SubnetUpdateName):
 
         # Обновляем имя подсети
         updated_subnet = await db.subnet.update(
-            where={"id": subnet_id},
+            where={"id": str(subnet_id)},
             data={"name": data.name}
         )
 
@@ -111,17 +109,17 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
     """
     try:
         # Проверяем существование подсети
-        subnet = await db.subnet.find_unique(where={"id": subnet_id})
+        subnet = await db.subnet.find_unique(where={"id": str(subnet_id)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
-
+        # TODO: добавь валидацию того то что айпи должен быть корректным
         # Проверка на совпадение нового IP с текущим
         if subnet.subnetIp == data.subnetIp:
             raise HTTPException(status_code=400, detail="New IP address is the same as the current IP address")
 
         # Обновляем IP-адрес подсети
         updated_subnet = await db.subnet.update(
-            where={"id": subnet_id},
+            where={"id": str(subnet_id)},
             data={"subnetIp": data.subnetIp}
         )
 
@@ -138,7 +136,7 @@ async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
     """
     try:
         # Проверяем существование подсети
-        subnet = await db.subnet.find_unique(where={"id": subnet_id})
+        subnet = await db.subnet.find_unique(where={"id": str(subnet_id)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
 
@@ -148,7 +146,7 @@ async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
 
         # Обновляем маску подсети
         updated_subnet = await db.subnet.update(
-            where={"id": subnet_id},
+            where={"id": str(subnet_id)},
             data={"subnetMask": data.subnetMask}
         )
 
@@ -156,3 +154,23 @@ async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating subnet mask: {str(e)}")
+
+
+@router.delete("/{subnet_id}", dependencies=[Depends(require_admin)])
+async def delete_subnet(subnet_id: UUID):
+    """
+    Удалить подсеть (Только для администраторов).
+    """
+    try:
+        # Проверка: существует ли подсеть
+        subnet = await db.subnet.find_unique(where={"id": str(subnet_id)})
+        if not subnet:
+            raise HTTPException(status_code=404, detail="Subnet not found")
+
+        # Удаляем подсеть
+        await db.subnet.delete(where={"id": str(subnet_id)})
+
+        return {"subnetId": subnet_id, "status": "deleted"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting subnet: {str(e)}")

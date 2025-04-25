@@ -21,7 +21,7 @@ model User {
 model Subnet {
   id         String   @id @default(uuid())
   name       String
-  subnetIp   String
+  subnetIp   String @unique
   subnetMask Int
   clients    Client[]
   User       User[]   @relation("SubnetToUser")

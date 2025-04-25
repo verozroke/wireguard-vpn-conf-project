@@ -19,12 +19,7 @@ async def get_users():
     """
     try:
         users = await db.user.find_many()
-
-        if not users:
-            raise HTTPException(status_code=404, detail="No users found")
-
-        # Преобразуем пользователей в список моделей UserResponse
-        return users
+        return [] if not users else users
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving users: {str(e)}")

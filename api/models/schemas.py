@@ -60,11 +60,9 @@ class ClientEnableDisable(BaseModel):
     clientId: UUID
 
 class ClientUpdateName(BaseModel):
-    userId: UUID
     name: str
 
 class ClientUpdateAddress(BaseModel):
-    userId: UUID
     clientIp: str
 
 class ClientDelete(BaseModel):
