@@ -1,13 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from uuid import UUID
-from ..models.schemas import SubnetResponse, SubnetCreate, SubnetUpdateName, SubnetUpdateSubnetIp, SubnetUpdateSubnetMask
+
+from fastapi import APIRouter, Depends, HTTPException
+
 from ..dependencies.auth import require_admin
 from ..models.db import db  # Импортируем Prisma db
+from ..models.schemas import (
+    SubnetCreate,
+    SubnetResponse,
+    SubnetUpdateName,
+    SubnetUpdateSubnetIp,
+    SubnetUpdateSubnetMask,
+)
+
 router = APIRouter()
 
 
-@router.get("/", response_model=List[SubnetResponse], dependencies=[Depends(require_admin)])
+@router.get(
+    "/", response_model=List[SubnetResponse], dependencies=[Depends(require_admin)]
+)
 async def get_subnets():
     """
     Получить список всех подсетей (Только для администраторов).
@@ -45,17 +56,23 @@ async def create_subnet(data: SubnetCreate):
     try:
         # Валидация маски подсети (должна быть в диапазоне от 0 до 32)
         if data.subnetMask < 0 or data.subnetMask > 32:
-            raise HTTPException(status_code=400, detail="Subnet mask must be between 0 and 32")
-        
+            raise HTTPException(
+                status_code=400, detail="Subnet mask must be between 0 and 32"
+            )
+
         # Проверка существования подсети с таким же IP
         existing_subnet = await db.subnet.find_unique(where={"subnetIp": data.subnetIp})
         if existing_subnet:
-            raise HTTPException(status_code=400, detail="Subnet with this IP already exists")
+            raise HTTPException(
+                status_code=400, detail="Subnet with this IP already exists"
+            )
         # TODO: добавь валидацию того то что айпи должен быть корректным
         # Проверка существования подсети с таким же именем
         existing_name_subnet = await db.subnet.find_first(where={"name": data.name})
         if existing_name_subnet:
-            raise HTTPException(status_code=400, detail="Subnet with this name already exists")
+            raise HTTPException(
+                status_code=400, detail="Subnet with this name already exists"
+            )
 
         # Создаем новую подсеть
         created_subnet = await db.subnet.create(
@@ -64,7 +81,9 @@ async def create_subnet(data: SubnetCreate):
                 "subnetIp": data.subnetIp,
                 "subnetMask": data.subnetMask,
                 "User": {
-                    "connect": {"id": str(data.userId)}  # Связываем подсеть с пользователем
+                    "connect": {
+                        "id": str(data.userId)
+                    }  # Связываем подсеть с пользователем
                 },
             }
         )
@@ -88,18 +107,21 @@ async def update_subnet_name(subnet_id: UUID, data: SubnetUpdateName):
 
         # Проверка на совпадение нового имени с текущим (если имя не изменилось, то ничего не обновляем)
         if subnet.name == data.name:
-            raise HTTPException(status_code=400, detail="New name is the same as the current name")
+            raise HTTPException(
+                status_code=400, detail="New name is the same as the current name"
+            )
 
         # Обновляем имя подсети
         updated_subnet = await db.subnet.update(
-            where={"id": str(subnet_id)},
-            data={"name": data.name}
+            where={"id": str(subnet_id)}, data={"name": data.name}
         )
 
         return updated_subnet
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating subnet name: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error updating subnet name: {str(e)}"
+        )
 
 
 @router.put("/{subnet_id}/subnet-ip", dependencies=[Depends(require_admin)])
@@ -115,18 +137,22 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
         # TODO: добавь валидацию того то что айпи должен быть корректным
         # Проверка на совпадение нового IP с текущим
         if subnet.subnetIp == data.subnetIp:
-            raise HTTPException(status_code=400, detail="New IP address is the same as the current IP address")
+            raise HTTPException(
+                status_code=400,
+                detail="New IP address is the same as the current IP address",
+            )
 
         # Обновляем IP-адрес подсети
         updated_subnet = await db.subnet.update(
-            where={"id": str(subnet_id)},
-            data={"subnetIp": data.subnetIp}
+            where={"id": str(subnet_id)}, data={"subnetIp": data.subnetIp}
         )
 
         return updated_subnet
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating subnet IP: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error updating subnet IP: {str(e)}"
+        )
 
 
 @router.put("/{subnet_id}/subnet-mask", dependencies=[Depends(require_admin)])
@@ -142,18 +168,21 @@ async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
 
         # Проверка маски подсети (должна быть в диапазоне от 0 до 32)
         if data.subnetMask < 0 or data.subnetMask > 32:
-            raise HTTPException(status_code=400, detail="Subnet mask must be between 0 and 32")
+            raise HTTPException(
+                status_code=400, detail="Subnet mask must be between 0 and 32"
+            )
 
         # Обновляем маску подсети
         updated_subnet = await db.subnet.update(
-            where={"id": str(subnet_id)},
-            data={"subnetMask": data.subnetMask}
+            where={"id": str(subnet_id)}, data={"subnetMask": data.subnetMask}
         )
 
         return updated_subnet
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating subnet mask: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error updating subnet mask: {str(e)}"
+        )
 
 
 @router.delete("/{subnet_id}", dependencies=[Depends(require_admin)])

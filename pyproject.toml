@@ -1,0 +1,17 @@
+[tool.black]
+line-length = 88
+target-version = ['py311']  # or your Python version
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["api", "models", "dependencies", "routes"]  # <- your internal modules
