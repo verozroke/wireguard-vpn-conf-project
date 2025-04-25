@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from uuid import UUID
+
+from api.models.db import db
 from ..models.schemas import (
-    UserResponse, UserCreate, UserUpdateLogin, UserUpdateClientId,
+    UserLogin, UserResponse, UserCreate, UserUpdateLogin, UserUpdateClientId,
     UserChangePassword, UserDelete
 )
-from ..dependencies.auth import require_admin, create_access_token, get_current_user
+from ..dependencies.auth import hash_password, require_admin, create_access_token, get_current_user, verify_password
 
 router = APIRouter()
 
@@ -15,63 +17,162 @@ async def get_users():
     """
     Получить список всех пользователей (Только для администраторов).
     """
-    return []  # Заглушка
+    try:
+        users = await db.user.find_many()
 
+        if not users:
+            raise HTTPException(status_code=404, detail="No users found")
+
+        # Преобразуем пользователей в список моделей UserResponse
+        return users
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving users: {str(e)}")
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(user_data: dict = Depends(get_current_user)):
+    """
+    Получить текущего аутентифицированного пользователя по токену.
+    """
+    try:
+        user_id = str(UUID(user_data.get("id")))
+        user = await db.user.find_unique(where={"id": user_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return user
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving user: {str(e)}")
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(user_id: UUID):
     """
     Получить информацию о пользователе по ID.
     """
-    return {"id": user_id, "login": "example_user", "clientId": 1, "role": "Employee"}  # Заглушка
+    try:
+        # Поиск пользователя по ID
+        user = await db.user.find_unique(where={"id": str(user_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
 
+        return user
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(current_user: UserResponse = Depends(get_current_user)):
-    """
-    Получить текущего аутентифицированного пользователя.
-    """
-    return current_user
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving user: {str(e)}")
 
-
-@router.post("/register")
+@router.post("/register", response_model=UserResponse)
 async def register_user(data: UserCreate):
     """
     Зарегистрировать нового пользователя.
     """
-    return {"message": "User registered", "user": data}  # Заглушка
+    try:
+      
+        # Проверка: существует ли пользователь с таким логином
+        existing_user = await db.user.find_unique(where={"login": data.login})
+        
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Login already taken")
+        if len(data.password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+        if len(data.password) > 32:
+            raise HTTPException(status_code=400, detail="Password must not exceed 32 characters")
+        # Хешируем пароль
+        hashed_password = hash_password(data.password)
 
+        # Создаем нового пользователя в базе данных
+        new_user = await db.user.create(
+            data={
+                "login": data.login,
+                "password": hashed_password,
+                "role": "Admin" if data.is_admin else "Employee"
+            }
+        )
+
+        return new_user
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error registering user: {str(e)}")
 
 @router.post("/login")
-async def login(data: UserCreate):
+async def login(data: UserLogin):
     """
     Авторизация пользователя и получение JWT-токена.
     """
-    user = None
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid credentials")
-    token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer"}
+    try:
+        # Проверка длины пароля
+        if len(data.password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+        if len(data.password) > 32:
+            raise HTTPException(status_code=400, detail="Password must not exceed 32 characters")
+
+        # Поиск пользователя по логину
+        user = await db.user.find_unique(where={"login": data.login})
+        if not user:
+            raise HTTPException(status_code=400, detail="Invalid credentials")
+
+        # Проверка правильности пароля
+        if not verify_password(data.password, user.password):
+            raise HTTPException(status_code=400, detail="Invalid credentials")
+
+        # Генерация токена
+        token = create_access_token({"id": user.id, "role": user.role})
+
+        return {
+            "access_token": token,
+            "token_type": "bearer"
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during login: {str(e)}")
 
 
-@router.put("/{user_id}/login")
+@router.put("/{user_id}/login", dependencies=[Depends(require_admin)])
 async def update_user_login(user_id: UUID, data: UserUpdateLogin):
     """
     Обновить логин пользователя (Только для администраторов).
     """
-    if not require_admin(data.userId):
-        raise HTTPException(status_code=403, detail="Access denied")
-    return {"userId": user_id, "newLogin": data.login}
+    try:
+        user = await db.user.find_unique(where={"id": str(user_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        login_taken = await db.user.find_unique(where={"login": data.login})
+        if login_taken and login_taken.id != str(user_id):
+            raise HTTPException(status_code=400, detail="Login already taken")
+
+        updated_user = await db.user.update(
+            where={"id": str(user_id)},
+            data={"login": data.login}
+        )
+
+        return updated_user
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating login: {str(e)}")
 
 
-@router.put("/{user_id}/client-id")
+
+@router.put("/{user_id}/client-id", dependencies=[Depends(require_admin)])
 async def update_user_client(user_id: UUID, data: UserUpdateClientId):
     """
     Обновить Client ID пользователя (Только для администраторов).
     """
-    if not require_admin(data.userId):
-        raise HTTPException(status_code=403, detail="Access denied")
-    return {"userId": user_id, "newClientId": data.clientId}
+    try:
+        user = await db.user.find_unique(where={"id": str(user_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        updated_user = await db.user.update(
+            where={"id": str(user_id)},
+            data={"clientId": data.clientId}
+        )
+
+        return updated_user
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating clientId: {str(e)}")
+
 
 
 @router.put("/change-password")
@@ -79,12 +180,52 @@ async def change_password(data: UserChangePassword):
     """
     Сменить пароль пользователя.
     """
-    return {"userId": data.userId, "status": "Password changed"}
+    try:
+        # Поиск пользователя по ID
+        user = await db.user.find_unique(where={"id": str(data.userId)})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Проверка старого пароля
+        if not verify_password(data.oldPassword, user.password):
+            raise HTTPException(status_code=400, detail="Incorrect old password")
+
+        # Валидация длины нового пароля
+        if len(data.newPassword) < 8:
+            raise HTTPException(status_code=400, detail="New password must be at least 8 characters long")
+        if len(data.newPassword) > 32:
+            raise HTTPException(status_code=400, detail="New password must not exceed 32 characters")
+
+        # Хешируем новый пароль
+        hashed_new_password = hash_password(data.newPassword)
+
+        # Обновляем пароль пользователя
+        await db.user.update(
+            where={"id": str(data.userId)},
+            data={"password": hashed_new_password}
+        )
+
+        return {"userId": data.userId, "status": "Password changed"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error changing password: {str(e)}")
 
 
-@router.delete("/{user_id}")
-async def delete_user(user_id: UUID, user=Depends(require_admin)):
+@router.delete("/{user_id}", dependencies=[Depends(require_admin)])
+async def delete_user(user_id: UUID):
     """
     Удалить пользователя (Только для администраторов).
     """
-    return {"userId": user_id, "status": "deleted"}
+    try:
+        # Проверка: существует ли пользователь
+        user = await db.user.find_unique(where={"id": str(user_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Удаляем пользователя
+        await db.user.delete(where={"id": str(user_id)})
+
+        return {"userId": user_id, "status": "deleted"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")

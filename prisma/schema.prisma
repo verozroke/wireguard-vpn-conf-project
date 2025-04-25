@@ -1,44 +1,32 @@
+generator client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = "5"
+  interface            = "asyncio"
+}
+
 datasource db {
   provider = "postgres"
   url      = env("DATABASE_URL")
 }
 
-
-
-// Prisma Client Generator
-generator client {
-  provider             = "prisma-client-py"
-  recursive_type_depth = 5
-  interface            = "sync"
-}
-
-// Модель пользователя
 model User {
   id       String   @id @default(uuid())
   login    String   @unique
   password String
-  clientId Int
-  subnets  Subnet[]
+  clientId Int?
   role     Role
+  subnets  Subnet[] @relation("SubnetToUser")
 }
 
-enum Role {
-  Admin
-  Employee
-}
-
-// Модель подсети
 model Subnet {
   id         String   @id @default(uuid())
   name       String
   subnetIp   String
-  subnetMask Int // (0-32)
+  subnetMask Int
   clients    Client[]
-
-  User User[]
+  User       User[]   @relation("SubnetToUser")
 }
 
-// Модель клиента
 model Client {
   id            String  @id @default(uuid())
   name          String
@@ -46,6 +34,11 @@ model Client {
   publicKey     String
   privateKeyRef String
   isEnabled     Boolean @default(true)
-  subnet        Subnet  @relation(fields: [subnetId], references: [id])
   subnetId      String
+  subnet        Subnet  @relation(fields: [subnetId], references: [id])
+}
+
+enum Role {
+  Admin
+  Employee
 }

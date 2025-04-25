@@ -3,7 +3,6 @@ from fastapi import FastAPI
 from api import router
 from api.models.db import db
 
-app = FastAPI(title="Diploma Project")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,6 +15,7 @@ async def lifespan(app: FastAPI):
     # Shutdown logic
     await db.disconnect()
     print("Database disconnected successfully")
+app = FastAPI(title="Diploma Project",  lifespan=lifespan)
 
 
 app.include_router(router)

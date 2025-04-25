@@ -1,18 +1,26 @@
 from pydantic import BaseModel
 from typing import List, Optional
 from uuid import UUID
-
 # User Schemas
 class UserBase(BaseModel):
     login: str
     clientId: int
 
-class UserCreate(UserBase):
+class UserCreate(BaseModel):
+    login: str
+    password: str
+    is_admin: bool
+    
+class UserLogin(BaseModel):
+    login: str
     password: str
 
-class UserResponse(UserBase):
+
+class UserResponse(BaseModel):
     id: UUID
+    login: str
     role: str
+    clientId: Optional[int] = None 
 
 class UserUpdateLogin(BaseModel):
     userId: UUID
@@ -20,7 +28,7 @@ class UserUpdateLogin(BaseModel):
 
 class UserUpdateClientId(BaseModel):
     userId: UUID
-    clientId: int
+    clientId: Optional[int] = None 
 
 class UserChangePassword(BaseModel):
     userId: UUID
@@ -38,8 +46,10 @@ class ClientBase(BaseModel):
     privateKeyRef: str
     subnetId: UUID
 
-class ClientCreate(ClientBase):
-    pass
+class ClientCreate(BaseModel):
+    name: str
+    clientIp: str
+    subnetId: UUID
 
 class ClientResponse(ClientBase):
     id: UUID
