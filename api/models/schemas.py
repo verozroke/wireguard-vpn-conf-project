@@ -5,10 +5,6 @@ from pydantic import BaseModel
 
 
 # User Schemas
-class UserBase(BaseModel):
-    login: str
-    clientId: int
-
 
 class UserCreate(BaseModel):
     login: str
@@ -25,17 +21,11 @@ class UserResponse(BaseModel):
     id: UUID
     login: str
     role: str
-    clientId: Optional[int] = None
 
 
 class UserUpdateLogin(BaseModel):
     userId: UUID
     login: str
-
-
-class UserUpdateClientId(BaseModel):
-    userId: UUID
-    clientId: Optional[int] = None
 
 
 class UserChangePassword(BaseModel):
@@ -61,6 +51,7 @@ class ClientCreate(BaseModel):
     name: str
     clientIp: str
     subnetId: UUID
+    userId: UUID #!
 
 
 class ClientResponse(ClientBase):
@@ -69,8 +60,8 @@ class ClientResponse(ClientBase):
 
 
 class ClientEnableDisable(BaseModel):
-    userId: UUID
     clientId: UUID
+    #! deleted userId
 
 
 class ClientUpdateName(BaseModel):
@@ -79,10 +70,6 @@ class ClientUpdateName(BaseModel):
 
 class ClientUpdateAddress(BaseModel):
     clientIp: str
-
-
-class ClientDelete(BaseModel):
-    clientId: UUID
 
 
 class ClientQRCodeResponse(BaseModel):
@@ -109,17 +96,14 @@ class SubnetResponse(SubnetBase):
 
 
 class SubnetUpdateName(BaseModel):
-    userId: UUID
     name: str
 
 
 class SubnetUpdateSubnetIp(BaseModel):
-    userId: UUID
     subnetIp: str
 
 
 class SubnetUpdateSubnetMask(BaseModel):
-    userId: UUID
     subnetMask: int
 
 

@@ -80,11 +80,7 @@ async def create_subnet(data: SubnetCreate):
                 "name": data.name,
                 "subnetIp": data.subnetIp,
                 "subnetMask": data.subnetMask,
-                "User": {
-                    "connect": {
-                        "id": str(data.userId)
-                    }  # Связываем подсеть с пользователем
-                },
+                "userId": str(data.userId),
             }
         )
 

@@ -13,9 +13,9 @@ model User {
   id       String   @id @default(uuid())
   login    String   @unique
   password String
-  clientId Int?
   role     Role
   subnets  Subnet[] @relation("SubnetToUser")
+  clients  Client[] @relation("UserToClient")
 }
 
 model Subnet {
@@ -23,8 +23,9 @@ model Subnet {
   name       String
   subnetIp   String   @unique
   subnetMask Int
-  clients    Client[]
-  User       User[]   @relation("SubnetToUser")
+  clients    Client[] @relation("SubnetToClient")
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], "SubnetToUser")
 }
 
 model Client {
@@ -35,7 +36,9 @@ model Client {
   privateKeyRef String
   isEnabled     Boolean @default(true)
   subnetId      String
-  subnet        Subnet  @relation(fields: [subnetId], references: [id])
+  subnet        Subnet  @relation(fields: [subnetId], references: [id], "SubnetToClient")
+  userId        String
+  user          User    @relation(fields: [userId], references: [id], "UserToClient")
 }
 
 enum Role {

@@ -15,10 +15,8 @@ from ..dependencies.auth import (
 from ..models.schemas import (
     UserChangePassword,
     UserCreate,
-    UserDelete,
     UserLogin,
     UserResponse,
-    UserUpdateClientId,
     UserUpdateLogin,
 )
 
@@ -169,27 +167,6 @@ async def update_user_login(user_id: UUID, data: UserUpdateLogin):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating login: {str(e)}")
 
-
-@router.put("/{user_id}/client-id", dependencies=[Depends(require_admin)])
-async def update_user_client(user_id: UUID, data: UserUpdateClientId):
-    """
-    Обновить Client ID пользователя (Только для администраторов).
-    """
-    try:
-        user = await db.user.find_unique(where={"id": str(user_id)})
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        updated_user = await db.user.update(
-            where={"id": str(user_id)}, data={"clientId": data.clientId}
-        )
-
-        return updated_user
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error updating clientId: {str(e)}"
-        )
 
 
 @router.put("/change-password")
