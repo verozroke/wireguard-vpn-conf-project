@@ -101,11 +101,6 @@ async def update_subnet_name(subnet_id: UUID, data: SubnetUpdateName):
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
 
-        # Проверка на совпадение нового имени с текущим (если имя не изменилось, то ничего не обновляем)
-        if subnet.name == data.name:
-            raise HTTPException(
-                status_code=400, detail="New name is the same as the current name"
-            )
 
         # Обновляем имя подсети
         updated_subnet = await db.subnet.update(
@@ -131,12 +126,6 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
         # TODO: добавь валидацию того то что айпи должен быть корректным
-        # Проверка на совпадение нового IP с текущим
-        if subnet.subnetIp == data.subnetIp:
-            raise HTTPException(
-                status_code=400,
-                detail="New IP address is the same as the current IP address",
-            )
 
         # Обновляем IP-адрес подсети
         updated_subnet = await db.subnet.update(
