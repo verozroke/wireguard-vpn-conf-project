@@ -3,8 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-
 # User Schemas
+
 
 class UserCreate(BaseModel):
     login: str
@@ -51,7 +51,7 @@ class ClientCreate(BaseModel):
     name: str
     clientIp: str
     subnetId: UUID
-    userId: UUID #!
+    userId: UUID  #!
 
 
 class ClientResponse(ClientBase):

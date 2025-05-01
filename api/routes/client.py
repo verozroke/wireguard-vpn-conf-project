@@ -168,7 +168,7 @@ async def create_client(client: ClientCreate):
                 "publicKey": public_key,
                 "privateKeyRef": private_key_ref,
                 "subnetId": str(client.subnetId),  # Преобразуем UUID в строку
-                "userId": str(client.userId)
+                "userId": str(client.userId),
             }
         )
 

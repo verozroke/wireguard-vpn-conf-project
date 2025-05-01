@@ -168,7 +168,6 @@ async def update_user_login(user_id: UUID, data: UserUpdateLogin):
         raise HTTPException(status_code=500, detail=f"Error updating login: {str(e)}")
 
 
-
 @router.put("/change-password")
 async def change_password(data: UserChangePassword):
     """

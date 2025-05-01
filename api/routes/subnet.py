@@ -101,7 +101,6 @@ async def update_subnet_name(subnet_id: UUID, data: SubnetUpdateName):
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
 
-
         # Обновляем имя подсети
         updated_subnet = await db.subnet.update(
             where={"id": str(subnet_id)}, data={"name": data.name}
