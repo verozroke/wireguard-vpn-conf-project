@@ -37,7 +37,8 @@ async def get_clients():
         return [] if not clients else clients
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching clients: {str(e)}")
-      
+
+
 @router.get("/{user_id}/my-clients")
 async def get_user_clients(user_id: UUID):
     """
@@ -46,18 +47,16 @@ async def get_user_clients(user_id: UUID):
     """
     try:
         clients = await db.client.find_many(
-            where={"userId": str(user_id)},
-            include={
-                "user": True,
-                "subnet": True
-            }
+            where={"userId": str(user_id)}, include={"user": True, "subnet": True}
         )
 
-
-        return  [] if not clients else clients
+        return [] if not clients else clients
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching user clients: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching user clients: {str(e)}"
+        )
+
 
 @router.get("/{client_id}", response_model=ClientResponse)
 async def get_client(client_id: UUID):
