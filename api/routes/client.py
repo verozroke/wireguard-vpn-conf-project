@@ -24,7 +24,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/", response_model=List[ClientResponse], dependencies=[Depends(require_admin)]
+    "/", dependencies=[Depends(require_admin)]
 )
 async def get_clients():
     """
@@ -32,7 +32,7 @@ async def get_clients():
     """
     try:
         # Получаем всех клиентов из базы данных
-        clients = await db.client.find_many()
+        clients = await db.client.find_many(include={"user": True, "subnet": True})
 
         return [] if not clients else clients
     except Exception as e:
@@ -162,7 +162,7 @@ async def get_client_configuration(client_id: UUID):
         )
 
 
-@router.post("/", response_model=ClientResponse)
+@router.post("/")
 async def create_client(client: ClientCreate):
     """
     Создать нового клиента.
@@ -188,7 +188,8 @@ async def create_client(client: ClientCreate):
                 "privateKeyRef": private_key_ref,
                 "subnetId": str(client.subnetId),  # Преобразуем UUID в строку
                 "userId": str(client.userId),
-            }
+            },
+            include={"user": True, "subnet": True}
         )
 
         # Возвращаем созданного клиента
@@ -252,7 +253,6 @@ async def disable_client(data: ClientEnableDisable):
 
 @router.put(
     "/{client_id}/name",
-    response_model=ClientResponse,
     # dependencies=[Depends(require_admin)],
 )
 async def update_client_name(client_id: UUID, data: ClientUpdateName):
@@ -265,15 +265,10 @@ async def update_client_name(client_id: UUID, data: ClientUpdateName):
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-        # Проверка, не совпадает ли новое имя с текущим
-        if client.name == data.name:
-            raise HTTPException(
-                status_code=400, detail="New name is the same as the current name"
-            )
 
         # Обновляем имя клиента в базе данных
         updated_client = await db.client.update(
-            where={"id": str(client_id)}, data={"name": data.name}
+            where={"id": str(client_id)}, data={"name": data.name}, include={"user": True, "subnet": True}
         )
 
         return updated_client
@@ -286,7 +281,6 @@ async def update_client_name(client_id: UUID, data: ClientUpdateName):
 
 @router.put(
     "/{client_id}/address",
-    response_model=ClientResponse,
     # dependencies=[Depends(require_admin)],
 )
 async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
@@ -299,18 +293,12 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-        # Проверка, не совпадает ли новый IP с текущим
-        if client.clientIp == data.clientIp:
-            raise HTTPException(
-                status_code=400,
-                detail="New IP address is the same as the current IP address",
-            )
 
         # TODO: update the IP-address of the PEER in the configuration file
         # TODO: добавь валидацию того то что айпи должен быть корректным и часть подсети его же подсети
         # Обновляем IP-адрес клиента в базе данных
         updated_client = await db.client.update(
-            where={"id": str(client_id)}, data={"clientIp": data.clientIp}
+            where={"id": str(client_id)}, data={"clientIp": data.clientIp}, include={"user": True, "subnet": True}
         )
 
         return updated_client

@@ -50,7 +50,7 @@ class ClientCreate(BaseModel):
     name: str
     clientIp: str
     subnetId: UUID
-    userId: UUID  #!
+    userId: UUID  
 
 
 class ClientResponse(ClientBase):
