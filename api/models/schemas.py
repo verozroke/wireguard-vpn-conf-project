@@ -24,7 +24,6 @@ class UserResponse(BaseModel):
 
 
 class UserUpdateLogin(BaseModel):
-    userId: UUID
     login: str
 
 
