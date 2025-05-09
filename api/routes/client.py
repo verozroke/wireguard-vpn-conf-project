@@ -23,9 +23,7 @@ from ..models.schemas import (
 router = APIRouter()
 
 
-@router.get(
-    "/", dependencies=[Depends(require_admin)]
-)
+@router.get("/", dependencies=[Depends(require_admin)])
 async def get_clients():
     """
     Получить список всех клиентов (Только для администраторов).
@@ -189,7 +187,7 @@ async def create_client(client: ClientCreate):
                 "subnetId": str(client.subnetId),  # Преобразуем UUID в строку
                 "userId": str(client.userId),
             },
-            include={"user": True, "subnet": True}
+            include={"user": True, "subnet": True},
         )
 
         # Возвращаем созданного клиента
@@ -265,10 +263,11 @@ async def update_client_name(client_id: UUID, data: ClientUpdateName):
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-
         # Обновляем имя клиента в базе данных
         updated_client = await db.client.update(
-            where={"id": str(client_id)}, data={"name": data.name}, include={"user": True, "subnet": True}
+            where={"id": str(client_id)},
+            data={"name": data.name},
+            include={"user": True, "subnet": True},
         )
 
         return updated_client
@@ -293,12 +292,13 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-
         # TODO: update the IP-address of the PEER in the configuration file
         # TODO: добавь валидацию того то что айпи должен быть корректным и часть подсети его же подсети
         # Обновляем IP-адрес клиента в базе данных
         updated_client = await db.client.update(
-            where={"id": str(client_id)}, data={"clientIp": data.clientIp}, include={"user": True, "subnet": True}
+            where={"id": str(client_id)},
+            data={"clientIp": data.clientIp},
+            include={"user": True, "subnet": True},
         )
 
         return updated_client

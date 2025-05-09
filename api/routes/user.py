@@ -36,24 +36,26 @@ async def get_users():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving users: {str(e)}")
-      
-    
+
+
 @router.get(
-    "/employees", response_model=List[UserResponse], dependencies=[Depends(require_admin)]
+    "/employees",
+    response_model=List[UserResponse],
+    dependencies=[Depends(require_admin)],
 )
 async def get_employees():
     """
     Получить список всех пользователей с ролью 'Employee' (Только для администраторов).
     """
     try:
-        employees = await db.user.find_many(
-            where={"role": "Employee"}
-        )
+        employees = await db.user.find_many(where={"role": "Employee"})
 
         return [] if not employees else employees
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving employees: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving employees: {str(e)}"
+        )
 
 
 @router.get("/me", response_model=UserResponse)
