@@ -64,12 +64,11 @@ async def create_subnet(data: SubnetCreate):
         # Валидация IP-адреса и проверка, что это именно адрес сети (а не, например, host)
         try:
             # Пытаемся создать сеть
-            net = ipaddress.IPv4Network(f"{data.subnetIp}/{data.subnetMask}", strict=True)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid subnet IP: {str(e)}"
+            net = ipaddress.IPv4Network(
+                f"{data.subnetIp}/{data.subnetMask}", strict=True
             )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid subnet IP: {str(e)}")
 
         # Проверка существования подсети с таким же IP
         existing_subnet = await db.subnet.find_unique(where={"subnetIp": data.subnetIp})
@@ -140,17 +139,15 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
 
         # Валидация: IP должен быть корректным и подходить как адрес подсети
         try:
-            net = ipaddress.IPv4Network(f"{data.subnetIp}/{subnet.subnetMask}", strict=True)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid subnet IP: {str(e)}"
+            net = ipaddress.IPv4Network(
+                f"{data.subnetIp}/{subnet.subnetMask}", strict=True
             )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid subnet IP: {str(e)}")
 
         # Обновляем IP-адрес подсети
         updated_subnet = await db.subnet.update(
-            where={"id": str(subnet_id)},
-            data={"subnetIp": data.subnetIp}
+            where={"id": str(subnet_id)}, data={"subnetIp": data.subnetIp}
         )
 
         return updated_subnet
@@ -161,6 +158,7 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
         raise HTTPException(
             status_code=500, detail=f"Error updating subnet IP: {str(e)}"
         )
+
 
 @router.put("/{subnet_id}/subnet-mask", dependencies=[Depends(require_admin)])
 async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):

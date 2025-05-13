@@ -1,10 +1,10 @@
 import base64
 import ipaddress
 import os
-from io import BytesIO
-from pathlib import Path
 import shutil
 import subprocess
+from io import BytesIO
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import List
 from uuid import UUID
@@ -83,6 +83,7 @@ AllowedIPs = {ip}/{mask}
     with open(WG_CONF_PATH, "a") as f:
         f.write(block)
 
+
 def update_allowed_ips_in_config(public_key: str, new_ip: str, subnet_mask: int):
     """Обновляет строку AllowedIPs у пира с нужным публичным ключом"""
     if not WG_CONF_PATH.exists():
@@ -119,6 +120,7 @@ def update_allowed_ips_in_config(public_key: str, new_ip: str, subnet_mask: int)
 
     with open(WG_CONF_PATH, "w") as f:
         f.writelines(new_lines)
+
 
 @router.get("/", dependencies=[Depends(require_admin)])
 async def get_clients():
@@ -270,15 +272,23 @@ async def create_client(client: ClientCreate):
 
         # Валидация IP-адреса
         try:
-            network = ipaddress.IPv4Network(f"{subnet.subnetIp}/{subnet.subnetMask}", strict=True)
+            network = ipaddress.IPv4Network(
+                f"{subnet.subnetIp}/{subnet.subnetMask}", strict=True
+            )
             client_ip = ipaddress.IPv4Address(client.clientIp)
 
             if client_ip not in network:
-                raise HTTPException(status_code=400, detail="Client IP is not within the subnet range")
+                raise HTTPException(
+                    status_code=400, detail="Client IP is not within the subnet range"
+                )
             if client_ip == network.network_address:
-                raise HTTPException(status_code=400, detail="Client IP cannot be the network address")
+                raise HTTPException(
+                    status_code=400, detail="Client IP cannot be the network address"
+                )
             if client_ip == network.broadcast_address:
-                raise HTTPException(status_code=400, detail="Client IP cannot be the broadcast address")
+                raise HTTPException(
+                    status_code=400, detail="Client IP cannot be the broadcast address"
+                )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid IP address: {str(e)}")
 
@@ -300,7 +310,11 @@ async def create_client(client: ClientCreate):
         client_dir.mkdir(parents=True, exist_ok=True)
 
         private_key = subprocess.check_output("wg genkey", shell=True).decode().strip()
-        public_key = subprocess.check_output(f"echo {private_key} | wg pubkey", shell=True).decode().strip()
+        public_key = (
+            subprocess.check_output(f"echo {private_key} | wg pubkey", shell=True)
+            .decode()
+            .strip()
+        )
 
         private_key_path = client_dir / "privatekey"
         public_key_path = client_dir / "publickey"
@@ -321,11 +335,8 @@ AllowedIPs = {client.clientIp}/{subnet.subnetMask}
         # 4. Обновляем клиента с реальными данными
         updated_client = await db.client.update(
             where={"id": created_client.id},
-            data={
-                "publicKey": public_key,
-                "privateKeyRef": str(private_key_path)
-            },
-            include={"user": True, "subnet": True}
+            data={"publicKey": public_key, "privateKeyRef": str(private_key_path)},
+            include={"user": True, "subnet": True},
         )
 
         return updated_client
@@ -341,8 +352,7 @@ async def enable_client(data: ClientEnableDisable):
     """
     try:
         client = await db.client.find_unique(
-            where={"id": str(data.clientId)},
-            include={"subnet": True}
+            where={"id": str(data.clientId)}, include={"subnet": True}
         )
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
@@ -353,8 +363,7 @@ async def enable_client(data: ClientEnableDisable):
 
         # Обновляем флаг в БД
         updated_client = await db.client.update(
-            where={"id": str(data.clientId)},
-            data={"isEnabled": True}
+            where={"id": str(data.clientId)}, data={"isEnabled": True}
         )
 
         return {"clientId": updated_client.id, "status": "enabled"}
@@ -379,8 +388,7 @@ async def disable_client(data: ClientEnableDisable):
         remove_peer_from_config(client.publicKey)
 
         updated_client = await db.client.update(
-            where={"id": str(data.clientId)},
-            data={"isEnabled": False}
+            where={"id": str(data.clientId)}, data={"isEnabled": False}
         )
 
         return {"clientId": updated_client.id, "status": "disabled"}
@@ -428,43 +436,45 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": str(client_id)}, include={"subnet": True})
+        client = await db.client.find_unique(
+            where={"id": str(client_id)}, include={"subnet": True}
+        )
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
         try:
             # Сеть клиента (по его подсети)
             subnet_network = ipaddress.IPv4Network(
-                f"{client.subnet.subnetIp}/{client.subnet.subnetMask}",
-                strict=True
+                f"{client.subnet.subnetIp}/{client.subnet.subnetMask}", strict=True
             )
             client_ip = ipaddress.IPv4Address(data.clientIp)
 
             if client_ip not in subnet_network:
                 raise HTTPException(
                     status_code=400,
-                    detail="Client IP is not within the client's subnet"
+                    detail="Client IP is not within the client's subnet",
                 )
 
             if client_ip == subnet_network.network_address:
                 raise HTTPException(
                     status_code=400,
-                    detail="Client IP cannot be the network address of the subnet"
+                    detail="Client IP cannot be the network address of the subnet",
                 )
 
             if client_ip == subnet_network.broadcast_address:
                 raise HTTPException(
                     status_code=400,
-                    detail="Client IP cannot be the broadcast address of the subnet"
+                    detail="Client IP cannot be the broadcast address of the subnet",
                 )
 
         except ValueError as e:
             raise HTTPException(
-                status_code=400,
-                detail=f"Invalid client IP address: {str(e)}"
+                status_code=400, detail=f"Invalid client IP address: {str(e)}"
             )
         # Обновляем IP-адрес в конфигурации
-        update_allowed_ips_in_config(client.publicKey, data.clientIp, client.subnet.subnetMask)
+        update_allowed_ips_in_config(
+            client.publicKey, data.clientIp, client.subnet.subnetMask
+        )
         # Обновляем IP-адрес клиента в базе данных
         updated_client = await db.client.update(
             where={"id": str(client_id)},
@@ -493,8 +503,8 @@ async def delete_client(client_id: UUID):
 
         # ✅ Удаляем PEER из wg0.conf по publicKey
         remove_peer_from_config(client.publicKey)
-        
-                # 2. Удаляем ключи
+
+        # 2. Удаляем ключи
         client_key_dir = WG_CLIENTS_DIR / str(client_id)
         if client_key_dir.exists():
             shutil.rmtree(client_key_dir)
@@ -506,5 +516,6 @@ async def delete_client(client_id: UUID):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting client: {str(e)}")
+
 
 # TODO: make so that IP tables will change too
