@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import router
 from api.models.db import db
+from wireguard.setup import setup_wireguard
 
 
 @asynccontextmanager
@@ -13,6 +15,9 @@ async def lifespan(app: FastAPI):
     await db.connect()
     print("Database connected successfully")
 
+    wg_keys = setup_wireguard()
+    os.environ["WG_PRIVATE_KEY"] = wg_keys["WG_PRIVATE_KEY"]
+    os.environ["WG_PUBLIC_KEY"] = wg_keys["WG_PUBLIC_KEY"]
     yield  # This is where the app runs
 
     # Shutdown logic

@@ -2,6 +2,9 @@ import base64
 import ipaddress
 import os
 from io import BytesIO
+from pathlib import Path
+import shutil
+import subprocess
 from tempfile import NamedTemporaryFile
 from typing import List
 from uuid import UUID
@@ -23,6 +26,99 @@ from ..models.schemas import (
 
 router = APIRouter()
 
+WG_CONF_DIR = Path("wg-conf")
+WG_CLIENTS_DIR = WG_CONF_DIR / "clients"
+WG_CONF_PATH = WG_CONF_DIR / "wg0.conf"
+
+
+def remove_peer_from_config(public_key: str):
+    """Удаляет весь блок [Peer] с указанным публичным ключом из wg0.conf"""
+    if not WG_CONF_PATH.exists():
+        return
+
+    with open(WG_CONF_PATH, "r") as f:
+        lines = f.readlines()
+
+    new_lines = []
+    inside_peer_block = False
+    current_block = []
+
+    for line in lines:
+        if line.strip() == "[Peer]":
+            # Сохраняем предыдущий блок, если он не совпадает
+            if current_block and not any(public_key in l for l in current_block):
+                new_lines.extend(current_block)
+            # Начинаем новый блок
+            current_block = [line]
+            inside_peer_block = True
+        elif inside_peer_block:
+            current_block.append(line)
+            if line.strip() == "" or line.strip().startswith("[Peer]"):
+                # Конец текущего блока — проверим его
+                if not any(public_key in l for l in current_block):
+                    new_lines.extend(current_block)
+                current_block = []
+                if line.strip() == "[Peer]":
+                    current_block.append(line)
+        else:
+            new_lines.append(line)
+
+    # Если после последней итерации остался блок — проверь его
+    if current_block and not any(public_key in l for l in current_block):
+        new_lines.extend(current_block)
+
+    # Перезаписываем конфиг
+    with open(WG_CONF_PATH, "w") as f:
+        f.writelines(new_lines)
+
+
+def add_peer_to_config(public_key: str, ip: str, mask: int):
+    """Добавляет новый блок [Peer] в wg0.conf"""
+    block = f"""
+
+[Peer]
+PublicKey = {public_key}
+AllowedIPs = {ip}/{mask}
+"""
+    with open(WG_CONF_PATH, "a") as f:
+        f.write(block)
+
+def update_allowed_ips_in_config(public_key: str, new_ip: str, subnet_mask: int):
+    """Обновляет строку AllowedIPs у пира с нужным публичным ключом"""
+    if not WG_CONF_PATH.exists():
+        return
+
+    with open(WG_CONF_PATH, "r") as f:
+        lines = f.readlines()
+
+    new_lines = []
+    inside_peer = False
+    found_peer = False
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+
+        if stripped == "[Peer]":
+            inside_peer = True
+            new_lines.append(line)
+            continue
+
+        if inside_peer and stripped.startswith("PublicKey") and public_key in stripped:
+            found_peer = True
+            new_lines.append(line)
+            continue
+
+        if inside_peer and stripped.startswith("AllowedIPs") and found_peer:
+            # Заменяем AllowedIPs строку
+            new_lines.append(f"AllowedIPs = {new_ip}/{subnet_mask}\n")
+            inside_peer = False
+            found_peer = False
+            continue
+
+        new_lines.append(line)
+
+    with open(WG_CONF_PATH, "w") as f:
+        f.writelines(new_lines)
 
 @router.get("/", dependencies=[Depends(require_admin)])
 async def get_clients():
@@ -171,51 +267,68 @@ async def create_client(client: ClientCreate):
         subnet = await db.subnet.find_unique(where={"id": str(client.subnetId)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
+
+        # Валидация IP-адреса
         try:
             network = ipaddress.IPv4Network(f"{subnet.subnetIp}/{subnet.subnetMask}", strict=True)
             client_ip = ipaddress.IPv4Address(client.clientIp)
 
             if client_ip not in network:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Client IP is not within the subnet range"
-                )
-
+                raise HTTPException(status_code=400, detail="Client IP is not within the subnet range")
             if client_ip == network.network_address:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Client IP cannot be the network address"
-                )
-
+                raise HTTPException(status_code=400, detail="Client IP cannot be the network address")
             if client_ip == network.broadcast_address:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Client IP cannot be the broadcast address"
-                )
-
+                raise HTTPException(status_code=400, detail="Client IP cannot be the broadcast address")
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid IP address: {str(e)}")
 
-        public_key = "zaglushka"
-        private_key_ref = "zaglushka"
-        # TODO: make that client publicKeyRef and privateKeyRef will be created before saving him to conf file
-        # TODO: make client to create in configuration file too as PEER=
-        # Создаем клиента в базе данных
-
+        # 1. Создаём клиента в БД с временными значениями
         created_client = await db.client.create(
             data={
                 "name": client.name,
                 "clientIp": client.clientIp,
-                "publicKey": public_key,
-                "privateKeyRef": private_key_ref,
-                "subnetId": str(client.subnetId),  # Преобразуем UUID в строку
+                "publicKey": ".",
+                "privateKeyRef": ".",
+                "subnetId": str(client.subnetId),
                 "userId": str(client.userId),
             },
             include={"user": True, "subnet": True},
         )
 
-        # Возвращаем созданного клиента
-        return created_client
+        # 2. Генерация ключей и сохранение в файлы
+        client_dir = WG_CLIENTS_DIR / created_client.id
+        client_dir.mkdir(parents=True, exist_ok=True)
+
+        private_key = subprocess.check_output("wg genkey", shell=True).decode().strip()
+        public_key = subprocess.check_output(f"echo {private_key} | wg pubkey", shell=True).decode().strip()
+
+        private_key_path = client_dir / "privatekey"
+        public_key_path = client_dir / "publickey"
+
+        private_key_path.write_text(private_key)
+        public_key_path.write_text(public_key)
+
+        # 3. Добавление в конфигурацию wg0.conf
+        peer_config = f"""
+
+[Peer]
+PublicKey = {public_key}
+AllowedIPs = {client.clientIp}/{subnet.subnetMask}
+"""
+        with open(WG_CONF_PATH, "a") as f:
+            f.write(peer_config)
+
+        # 4. Обновляем клиента с реальными данными
+        updated_client = await db.client.update(
+            where={"id": created_client.id},
+            data={
+                "publicKey": public_key,
+                "privateKeyRef": str(private_key_path)
+            },
+            include={"user": True, "subnet": True}
+        )
+
+        return updated_client
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating client: {str(e)}")
@@ -227,18 +340,21 @@ async def enable_client(data: ClientEnableDisable):
     Включить клиента (Только для администраторов).
     """
     try:
-        # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": str(data.clientId)})
+        client = await db.client.find_unique(
+            where={"id": str(data.clientId)},
+            include={"subnet": True}
+        )
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
-
-        # Проверяем, был ли клиент деактивирован (isEnabled = False)
         if client.isEnabled:
             raise HTTPException(status_code=400, detail="Client is already enabled")
-        # TODO: Add client as PEER to the configuration
-        # Активируем клиента (изменяем флаг isEnabled на True)
+        # ✅ Добавляем клиента как PEER
+        add_peer_to_config(client.publicKey, client.clientIp, client.subnet.subnetMask)
+
+        # Обновляем флаг в БД
         updated_client = await db.client.update(
-            where={"id": str(data.clientId)}, data={"isEnabled": True}
+            where={"id": str(data.clientId)},
+            data={"isEnabled": True}
         )
 
         return {"clientId": updated_client.id, "status": "enabled"}
@@ -253,18 +369,18 @@ async def disable_client(data: ClientEnableDisable):
     Отключить клиента (Только для администраторов).
     """
     try:
-        # Ищем клиента по ID
         client = await db.client.find_unique(where={"id": str(data.clientId)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
-
-        # Проверяем, был ли клиент уже деактивирован (isEnabled = False)
         if not client.isEnabled:
             raise HTTPException(status_code=400, detail="Client is already disabled")
-        # TODO: Remove client as PEER to the configuration
-        # Деактивируем клиента (изменяем флаг isEnabled на False)
+
+        # ✅ Удаляем клиента из wg0.conf
+        remove_peer_from_config(client.publicKey)
+
         updated_client = await db.client.update(
-            where={"id": str(data.clientId)}, data={"isEnabled": False}
+            where={"id": str(data.clientId)},
+            data={"isEnabled": False}
         )
 
         return {"clientId": updated_client.id, "status": "disabled"}
@@ -312,15 +428,14 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": str(client_id)})
+        client = await db.client.find_unique(where={"id": str(client_id)}, include={"subnet": True})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-        # TODO: update the IP-address of the PEER in the configuration file
         try:
             # Сеть клиента (по его подсети)
             subnet_network = ipaddress.IPv4Network(
-                f"{client.subnet['subnetIp']}/{client.subnet['subnetMask']}",
+                f"{client.subnet.subnetIp}/{client.subnet.subnetMask}",
                 strict=True
             )
             client_ip = ipaddress.IPv4Address(data.clientIp)
@@ -348,7 +463,8 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
                 status_code=400,
                 detail=f"Invalid client IP address: {str(e)}"
             )
-        
+        # Обновляем IP-адрес в конфигурации
+        update_allowed_ips_in_config(client.publicKey, data.clientIp, client.subnet.subnetMask)
         # Обновляем IP-адрес клиента в базе данных
         updated_client = await db.client.update(
             where={"id": str(client_id)},
@@ -375,7 +491,14 @@ async def delete_client(client_id: UUID):
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-        # TODO: delete the client PEER from configuration file
+        # ✅ Удаляем PEER из wg0.conf по publicKey
+        remove_peer_from_config(client.publicKey)
+        
+                # 2. Удаляем ключи
+        client_key_dir = WG_CLIENTS_DIR / str(client_id)
+        if client_key_dir.exists():
+            shutil.rmtree(client_key_dir)
+
         # Удаляем клиента из базы данных
         await db.client.delete(where={"id": str(client_id)})
 
@@ -383,3 +506,5 @@ async def delete_client(client_id: UUID):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting client: {str(e)}")
+
+# TODO: make so that IP tables will change too
