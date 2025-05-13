@@ -1,4 +1,5 @@
 import base64
+import ipaddress
 import os
 from io import BytesIO
 from tempfile import NamedTemporaryFile
@@ -170,8 +171,31 @@ async def create_client(client: ClientCreate):
         subnet = await db.subnet.find_unique(where={"id": str(client.subnetId)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
-        # TODO: нужно добавить проверку на то является ли айпи клиента частью айпи нашей подсети (также не заменяет ли он адрес подсети и его броадкаст)
-        # TODO: добавь валидацию того то что айпи должен быть корректным
+        try:
+            network = ipaddress.IPv4Network(f"{subnet.subnetIp}/{subnet.subnetMask}", strict=True)
+            client_ip = ipaddress.IPv4Address(client.clientIp)
+
+            if client_ip not in network:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Client IP is not within the subnet range"
+                )
+
+            if client_ip == network.network_address:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Client IP cannot be the network address"
+                )
+
+            if client_ip == network.broadcast_address:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Client IP cannot be the broadcast address"
+                )
+
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid IP address: {str(e)}")
+
         public_key = "zaglushka"
         private_key_ref = "zaglushka"
         # TODO: make that client publicKeyRef and privateKeyRef will be created before saving him to conf file
@@ -293,7 +317,38 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
             raise HTTPException(status_code=404, detail="Client not found")
 
         # TODO: update the IP-address of the PEER in the configuration file
-        # TODO: добавь валидацию того то что айпи должен быть корректным и часть подсети его же подсети
+        try:
+            # Сеть клиента (по его подсети)
+            subnet_network = ipaddress.IPv4Network(
+                f"{client.subnet['subnetIp']}/{client.subnet['subnetMask']}",
+                strict=True
+            )
+            client_ip = ipaddress.IPv4Address(data.clientIp)
+
+            if client_ip not in subnet_network:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Client IP is not within the client's subnet"
+                )
+
+            if client_ip == subnet_network.network_address:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Client IP cannot be the network address of the subnet"
+                )
+
+            if client_ip == subnet_network.broadcast_address:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Client IP cannot be the broadcast address of the subnet"
+                )
+
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid client IP address: {str(e)}"
+            )
+        
         # Обновляем IP-адрес клиента в базе данных
         updated_client = await db.client.update(
             where={"id": str(client_id)},

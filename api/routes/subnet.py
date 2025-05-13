@@ -1,3 +1,4 @@
+import ipaddress
 from typing import List
 from uuid import UUID
 
@@ -54,10 +55,20 @@ async def create_subnet(data: SubnetCreate):
     Создать новую подсеть (Только для администраторов).
     """
     try:
-        # Валидация маски подсети (должна быть в диапазоне от 0 до 32)
+        # Валидация маски подсети
         if data.subnetMask < 0 or data.subnetMask > 32:
             raise HTTPException(
                 status_code=400, detail="Subnet mask must be between 0 and 32"
+            )
+
+        # Валидация IP-адреса и проверка, что это именно адрес сети (а не, например, host)
+        try:
+            # Пытаемся создать сеть
+            net = ipaddress.IPv4Network(f"{data.subnetIp}/{data.subnetMask}", strict=True)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid subnet IP: {str(e)}"
             )
 
         # Проверка существования подсети с таким же IP
@@ -66,7 +77,7 @@ async def create_subnet(data: SubnetCreate):
             raise HTTPException(
                 status_code=400, detail="Subnet with this IP already exists"
             )
-        # TODO: добавь валидацию того то что айпи должен быть корректным
+
         # Проверка существования подсети с таким же именем
         existing_name_subnet = await db.subnet.find_first(where={"name": data.name})
         if existing_name_subnet:
@@ -74,7 +85,7 @@ async def create_subnet(data: SubnetCreate):
                 status_code=400, detail="Subnet with this name already exists"
             )
 
-        # Создаем новую подсеть
+        # Всё валидно — создаем подсеть
         created_subnet = await db.subnet.create(
             data={
                 "name": data.name,
@@ -86,6 +97,8 @@ async def create_subnet(data: SubnetCreate):
 
         return created_subnet
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating subnet: {str(e)}")
 
@@ -124,20 +137,30 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
         subnet = await db.subnet.find_unique(where={"id": str(subnet_id)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
-        # TODO: добавь валидацию того то что айпи должен быть корректным
+
+        # Валидация: IP должен быть корректным и подходить как адрес подсети
+        try:
+            net = ipaddress.IPv4Network(f"{data.subnetIp}/{subnet.subnetMask}", strict=True)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid subnet IP: {str(e)}"
+            )
 
         # Обновляем IP-адрес подсети
         updated_subnet = await db.subnet.update(
-            where={"id": str(subnet_id)}, data={"subnetIp": data.subnetIp}
+            where={"id": str(subnet_id)},
+            data={"subnetIp": data.subnetIp}
         )
 
         return updated_subnet
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error updating subnet IP: {str(e)}"
         )
-
 
 @router.put("/{subnet_id}/subnet-mask", dependencies=[Depends(require_admin)])
 async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
