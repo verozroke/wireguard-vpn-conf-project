@@ -8,6 +8,7 @@ from api import router
 from api.models.db import db
 from wireguard.setup import setup_wireguard
 
+# TODO: change the project directory structure of API routes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
