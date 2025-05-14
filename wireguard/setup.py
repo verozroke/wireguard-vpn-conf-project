@@ -9,7 +9,7 @@ def setup_wireguard():
     PUBLIC_KEY_PATH = WG_CONF_DIR / "publickey"
     WG0_CONF_PATH = WG_CONF_DIR / "wg0.conf"
 
-    LISTEN_PORT = 51820
+    LISTEN_PORT = 51830
     WG_INTERFACE_IP = "10.10.10.1/24"
 
     # Создаём директорию, если её нет
