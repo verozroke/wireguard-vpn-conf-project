@@ -18,6 +18,8 @@ from ..models.schemas import (
 router = APIRouter()
 WG_CONF_DIR = Path("etc/wireguard")
 WG_CONF_PATH = WG_CONF_DIR / "wg0.conf"
+
+
 def update_config_with_subnet_and_iptables(data: SubnetCreate):
     if not WG_CONF_PATH.exists():
         raise HTTPException(status_code=500, detail="wg0.conf not found")
@@ -55,10 +57,18 @@ def update_config_with_subnet_and_iptables(data: SubnetCreate):
     for subnet in existing_subnets:
         if subnet == new_address:
             continue
-        isolation_rules_up.append(f"iptables -I FORWARD -s {subnet} -d {new_address} -j DROP")
-        isolation_rules_up.append(f"iptables -I FORWARD -s {new_address} -d {subnet} -j DROP")
-        isolation_rules_down.append(f"iptables -D FORWARD -s {subnet} -d {new_address} -j DROP")
-        isolation_rules_down.append(f"iptables -D FORWARD -s {new_address} -d {subnet} -j DROP")
+        isolation_rules_up.append(
+            f"iptables -I FORWARD -s {subnet} -d {new_address} -j DROP"
+        )
+        isolation_rules_up.append(
+            f"iptables -I FORWARD -s {new_address} -d {subnet} -j DROP"
+        )
+        isolation_rules_down.append(
+            f"iptables -D FORWARD -s {subnet} -d {new_address} -j DROP"
+        )
+        isolation_rules_down.append(
+            f"iptables -D FORWARD -s {new_address} -d {subnet} -j DROP"
+        )
 
     def update_iptables_block(lines, key, new_rules):
         updated = []
@@ -74,14 +84,19 @@ def update_config_with_subnet_and_iptables(data: SubnetCreate):
             else:
                 updated.append(line)
         if not found:
-            raise HTTPException(status_code=500, detail=f"{key} line not found in config")
+            raise HTTPException(
+                status_code=500, detail=f"{key} line not found in config"
+            )
         return updated
 
     updated_lines = update_iptables_block(updated_lines, "PostUp", isolation_rules_up)
-    updated_lines = update_iptables_block(updated_lines, "PostDown", isolation_rules_down)
+    updated_lines = update_iptables_block(
+        updated_lines, "PostDown", isolation_rules_down
+    )
 
     with open(WG_CONF_PATH, "w") as f:
         f.writelines(updated_lines)
+
 
 def update_subnet_ip_in_conf(old_ip: str, new_ip: str, mask: int):
     """
@@ -114,10 +129,7 @@ def update_subnet_ip_in_conf(old_ip: str, new_ip: str, mask: int):
 
         # Обновляем iptables правила в PostUp и PostDown
         elif stripped.startswith("PostUp =") or stripped.startswith("PostDown ="):
-            updated_line = (
-                line.replace(old_cidr, new_cidr)
-                    .replace(old_ip, new_ip)
-            )
+            updated_line = line.replace(old_cidr, new_cidr).replace(old_ip, new_ip)
             updated_lines.append(updated_line)
 
         # Все остальные строки — без изменений
@@ -150,7 +162,9 @@ def update_subnet_mask_in_conf(subnet_ip: str, old_mask: int, new_mask: int):
             ]
             updated_lines.append(f"Address = {', '.join(updated_addresses)}\n")
         # Обновляем iptables в PostUp/PostDown
-        elif line.strip().startswith("PostUp =") or line.strip().startswith("PostDown ="):
+        elif line.strip().startswith("PostUp =") or line.strip().startswith(
+            "PostDown ="
+        ):
             updated_line = line.replace(old_cidr, new_cidr)
             updated_lines.append(updated_line)
         else:
@@ -158,6 +172,7 @@ def update_subnet_mask_in_conf(subnet_ip: str, old_mask: int, new_mask: int):
 
     with open(WG_CONF_PATH, "w") as f:
         f.writelines(updated_lines)
+
 
 async def remove_subnet_from_conf(subnet_ip: str, mask: int):
     if not WG_CONF_PATH.exists():
@@ -169,7 +184,9 @@ async def remove_subnet_from_conf(subnet_ip: str, mask: int):
         lines = f.readlines()
 
     updated_lines = []
-    has_other_subnets = await db.subnet.find_many(where={"subnetIp": {"not": subnet_ip}})
+    has_other_subnets = await db.subnet.find_many(
+        where={"subnetIp": {"not": subnet_ip}}
+    )
 
     for line in lines:
         if line.strip().startswith("Address ="):
@@ -177,25 +194,34 @@ async def remove_subnet_from_conf(subnet_ip: str, mask: int):
             addresses = [a for a in addresses if a != cidr]
             updated_lines.append(f"Address = {', '.join(addresses)}\n")
 
-        elif line.strip().startswith("PostUp =") or line.strip().startswith("PostDown ="):
+        elif line.strip().startswith("PostUp =") or line.strip().startswith(
+            "PostDown ="
+        ):
             if not has_other_subnets:
                 # Reset to default rules
                 if "PostUp" in line:
-                    updated_lines.append("PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE\n")
+                    updated_lines.append(
+                        "PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE\n"
+                    )
                 else:
-                    updated_lines.append("PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ens3 -j MASQUERADE\n")
+                    updated_lines.append(
+                        "PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ens3 -j MASQUERADE\n"
+                    )
             else:
                 # Remove subnet references only
-                updated_line = line.replace(f"-s {cidr} -d", "") \
-                                  .replace(f"-s {subnet_ip} -d {cidr}", "") \
-                                  .replace(f"{cidr}", "") \
-                                  .replace(f"{subnet_ip}", "")
+                updated_line = (
+                    line.replace(f"-s {cidr} -d", "")
+                    .replace(f"-s {subnet_ip} -d {cidr}", "")
+                    .replace(f"{cidr}", "")
+                    .replace(f"{subnet_ip}", "")
+                )
                 updated_lines.append(updated_line)
         else:
             updated_lines.append(line)
 
     with open(WG_CONF_PATH, "w") as f:
         f.writelines(updated_lines)
+
 
 @router.get(
     "/", response_model=List[SubnetResponse], dependencies=[Depends(require_admin)]
@@ -236,7 +262,9 @@ async def create_subnet(data: SubnetCreate):
     """
     try:
         if data.subnetMask < 0 or data.subnetMask > 32:
-            raise HTTPException(status_code=400, detail="Subnet mask must be between 0 and 32")
+            raise HTTPException(
+                status_code=400, detail="Subnet mask must be between 0 and 32"
+            )
 
         try:
             ipaddress.IPv4Network(f"{data.subnetIp}/{data.subnetMask}", strict=True)
@@ -245,11 +273,15 @@ async def create_subnet(data: SubnetCreate):
 
         existing_subnet = await db.subnet.find_unique(where={"subnetIp": data.subnetIp})
         if existing_subnet:
-            raise HTTPException(status_code=400, detail="Subnet with this IP already exists")
+            raise HTTPException(
+                status_code=400, detail="Subnet with this IP already exists"
+            )
 
         existing_name_subnet = await db.subnet.find_first(where={"name": data.name})
         if existing_name_subnet:
-            raise HTTPException(status_code=400, detail="Subnet with this name already exists")
+            raise HTTPException(
+                status_code=400, detail="Subnet with this name already exists"
+            )
 
         update_config_with_subnet_and_iptables(data)
 
@@ -302,8 +334,7 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
     try:
         # Получаем подсеть вместе с клиентами
         subnet = await db.subnet.find_unique(
-            where={"id": str(subnet_id)},
-            include={"clients": True}
+            where={"id": str(subnet_id)}, include={"clients": True}
         )
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
@@ -311,7 +342,7 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
         if subnet.clients and len(subnet.clients) > 0:
             raise HTTPException(
                 status_code=400,
-                detail="You can't change the subnet IP address when there's clients attached to this subnet"
+                detail="You can't change the subnet IP address when there's clients attached to this subnet",
             )
 
         try:
@@ -321,9 +352,7 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
 
         # Обновляем конфиг: Address= + iptables
         update_subnet_ip_in_conf(
-            old_ip=subnet.subnetIp,
-            new_ip=data.subnetIp,
-            mask=subnet.subnetMask
+            old_ip=subnet.subnetIp, new_ip=data.subnetIp, mask=subnet.subnetMask
         )
 
         # Обновляем IP-адрес в базе
@@ -346,8 +375,7 @@ async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
     """
     Обновить маску подсети (Только для администраторов).
     """
-    
-    
+
     try:
         # Проверяем существование подсети
         subnet = await db.subnet.find_unique(where={"id": str(subnet_id)})
@@ -364,7 +392,7 @@ async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
         if subnet.clients and len(subnet.clients) > 0:
             raise HTTPException(
                 status_code=400,
-                detail="You can't change the subnet mask when there's clients attached to this subnet"
+                detail="You can't change the subnet mask when there's clients attached to this subnet",
             )
 
         # ❌ Проверка, что subnetIp остаётся сетевым адресом при новой маске
@@ -375,13 +403,13 @@ async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail="Your new subnet mask is not compatible with subnetIP. Change the SubnetIp"
+                detail="Your new subnet mask is not compatible with subnetIP. Change the SubnetIp",
             )
 
         update_subnet_mask_in_conf(
             subnet_ip=subnet.subnetIp,
             old_mask=subnet.subnetMask,
-            new_mask=data.subnetMask
+            new_mask=data.subnetMask,
         )
         # Обновляем маску подсети
         updated_subnet = await db.subnet.update(
@@ -404,8 +432,7 @@ async def delete_subnet(subnet_id: UUID):
     try:
         # Получаем подсеть с клиентами
         subnet = await db.subnet.find_unique(
-            where={"id": str(subnet_id)},
-            include={"clients": True}
+            where={"id": str(subnet_id)}, include={"clients": True}
         )
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
@@ -414,7 +441,7 @@ async def delete_subnet(subnet_id: UUID):
         if subnet.clients and len(subnet.clients) > 0:
             raise HTTPException(
                 status_code=400,
-                detail="You can't delete a subnet that has clients attached to it"
+                detail="You can't delete a subnet that has clients attached to it",
             )
 
         # ✅ Удаляем из конфигурации (Address= и iptables)

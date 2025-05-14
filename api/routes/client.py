@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import List
 from uuid import UUID
+
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -36,6 +37,7 @@ WG_CONF_DIR = Path("etc/wireguard")
 WG_CLIENTS_DIR = WG_CONF_DIR / "clients"
 WG_CONF_PATH = WG_CONF_DIR / "wg0.conf"
 WG_SERVER_PUBLIC_KEY_FILE = WG_CONF_DIR / "publickey"
+
 
 def remove_peer_from_config(public_key: str):
     """Удаляет весь блок [Peer] с указанным публичным ключом из wg0.conf"""
@@ -128,13 +130,12 @@ def update_allowed_ips_in_config(public_key: str, new_ip: str, subnet_mask: int)
         f.writelines(new_lines)
 
 
-
-
-
-def generate_client_config_text(client_ip: str, client_private_key_path: str, server_public_key: str) -> str:
+def generate_client_config_text(
+    client_ip: str, client_private_key_path: str, server_public_key: str
+) -> str:
     """
     Генерирует текст WireGuard-конфигурации для клиента.
-    
+
     :param client_ip: IP-адрес клиента
     :param client_private_key_path: Путь к файлу с приватным ключом (из client.privateKeyRef)
     :param server_public_key: публичный ключ сервера (из client.publicKey)
@@ -158,7 +159,6 @@ Endpoint = {DEFAULT_SERVER_IP}:{DEFAULT_SERVER_PORT}
 AllowedIPs = {DEFAULT_ALLOWED_IPS}
 PersistentKeepAlive = {DEFAULT_PERSISTENT_KEEP_ALIVE}
 """.strip()
-
 
 
 @router.get("/", dependencies=[Depends(require_admin)])
@@ -223,7 +223,7 @@ async def get_client_qrcode(client_id: UUID):
         config_text = generate_client_config_text(
             client_ip=client.clientIp,
             client_private_key_path=client.privateKeyRef,
-            server_public_key=client.publicKey
+            server_public_key=client.publicKey,
         )
         qr = qrcode.QRCode(
             version=1,
@@ -231,7 +231,7 @@ async def get_client_qrcode(client_id: UUID):
             box_size=10,
             border=4,
         )
-        qr.add_data(config_text) 
+        qr.add_data(config_text)
         qr.make(fit=True)
 
         # Создание изображения QR-кода
@@ -261,8 +261,7 @@ async def get_client_configuration(client_id: UUID):
     try:
         # Ищем клиента по ID
         client = await db.client.find_unique(
-            where={"id": str(client_id)},
-            include={"subnet": True}
+            where={"id": str(client_id)}, include={"subnet": True}
         )
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
@@ -273,7 +272,7 @@ async def get_client_configuration(client_id: UUID):
         config_text = generate_client_config_text(
             client_ip=client.clientIp,
             client_private_key_path=client.privateKeyRef,
-            server_public_key=client.publicKey
+            server_public_key=client.publicKey,
         )
 
         # Формируем имя файла
@@ -283,7 +282,7 @@ async def get_client_configuration(client_id: UUID):
         temp_file = NamedTemporaryFile(delete=False, mode="w", suffix=".conf")
         temp_file_path = temp_file.name
         try:
-            temp_file.write(config_text) 
+            temp_file.write(config_text)
         finally:
             temp_file.close()
 
@@ -564,6 +563,3 @@ async def delete_client(client_id: UUID):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting client: {str(e)}")
-
-
-
