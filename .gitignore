@@ -10,11 +10,6 @@ __pycache__/
 *.pyo
 
 # Virtual environment
-venv/
-.env/
-.env.local
-.env.*.local
-*.venv
 Pipfile
 Pipfile.lock
 poetry.lock
