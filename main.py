@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Diploma Project", lifespan=lifespan)
 
-origins = ["http://127.0.0.1:3000", "wg-vpn-panel.vercel.app"]
+origins = ["http://127.0.0.1:3000", "https://wg-vpn-panel.vercel.app"]
 
 # Добавляем CORS миддлвару
 app.add_middleware(
