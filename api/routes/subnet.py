@@ -20,14 +20,14 @@ WG_CONF_DIR = Path("/etc/wireguard")
 WG_CONF_PATH = WG_CONF_DIR / "wg0.conf"
 
 
-def update_config_with_subnet_and_iptables(data: SubnetCreate):
+def update_config_with_subnet_and_iptables(data: dict):
     if not WG_CONF_PATH.exists():
         raise HTTPException(status_code=500, detail="wg0.conf not found")
 
     with open(WG_CONF_PATH, "r") as f:
         lines = f.readlines()
 
-    new_address = f"{data.subnetIp}/{data.subnetMask}"
+    new_address = f"{data['subnetIp']}/{data['subnetMask']}"
     updated_lines = []
     address_line_found = False
 
