@@ -4,13 +4,13 @@ from pathlib import Path
 
 
 def setup_wireguard():
-    WG_CONF_DIR = Path("wg-conf")
+    WG_CONF_DIR = Path("etc/wireguard")
     PRIVATE_KEY_PATH = WG_CONF_DIR / "privatekey"
     PUBLIC_KEY_PATH = WG_CONF_DIR / "publickey"
     WG0_CONF_PATH = WG_CONF_DIR / "wg0.conf"
 
     LISTEN_PORT = 51820
-    WG_INTERFACE_IP = "10.0.0.1/24"
+    WG_INTERFACE_IP = "10.10.10.1/24"
 
     # Создаём директорию, если её нет
     WG_CONF_DIR.mkdir(parents=True, exist_ok=True)

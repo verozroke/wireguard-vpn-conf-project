@@ -8,7 +8,6 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import List
 from uuid import UUID
-
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -26,10 +25,17 @@ from ..models.schemas import (
 
 router = APIRouter()
 
-WG_CONF_DIR = Path("wg-conf")
+DEFAULT_DNS_IP = "8.8.8.8"
+DEFAULT_SERVER_IP = "51.195.217.223"
+DEFAULT_SERVER_PORT = 51830
+DEFAULT_ALLOWED_IPS = "0.0.0.0/0"
+DEFAULT_PERSISTENT_KEEP_ALIVE = 20
+
+
+WG_CONF_DIR = Path("etc/wireguard")
 WG_CLIENTS_DIR = WG_CONF_DIR / "clients"
 WG_CONF_PATH = WG_CONF_DIR / "wg0.conf"
-
+WG_SERVER_PUBLIC_KEY_FILE = WG_CONF_DIR / "publickey"
 
 def remove_peer_from_config(public_key: str):
     """Удаляет весь блок [Peer] с указанным публичным ключом из wg0.conf"""
@@ -122,6 +128,39 @@ def update_allowed_ips_in_config(public_key: str, new_ip: str, subnet_mask: int)
         f.writelines(new_lines)
 
 
+
+
+
+def generate_client_config_text(client_ip: str, client_private_key_path: str, server_public_key: str) -> str:
+    """
+    Генерирует текст WireGuard-конфигурации для клиента.
+    
+    :param client_ip: IP-адрес клиента
+    :param client_private_key_path: Путь к файлу с приватным ключом (из client.privateKeyRef)
+    :param server_public_key: публичный ключ сервера (из client.publicKey)
+    """
+    private_key_file = Path(client_private_key_path)
+
+    if not private_key_file.exists():
+        raise FileNotFoundError("Client private key file not found")
+
+    with open(private_key_file, "r") as f:
+        private_key = f.read().strip()
+
+    return f"""[Interface]
+PrivateKey = {private_key}
+Address = {client_ip}/32
+DNS = {DEFAULT_DNS_IP}
+
+[Peer]
+PublicKey = {server_public_key}
+Endpoint = {DEFAULT_SERVER_IP}:{DEFAULT_SERVER_PORT}
+AllowedIPs = {DEFAULT_ALLOWED_IPS}
+PersistentKeepAlive = {DEFAULT_PERSISTENT_KEEP_ALIVE}
+""".strip()
+
+
+
 @router.get("/", dependencies=[Depends(require_admin)])
 async def get_clients():
     """
@@ -181,15 +220,18 @@ async def get_client_qrcode(client_id: UUID):
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-        # Генерация QR-кода с текстом "Заглушка"
+        config_text = generate_client_config_text(
+            client_ip=client.clientIp,
+            client_private_key_path=client.privateKeyRef,
+            server_public_key=client.publicKey
+        )
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_L,
             box_size=10,
             border=4,
         )
-        # TODO: change to real client configuration
-        qr.add_data("Заглушка" + client.name)  # Можно заменить на конфигурацию клиента
+        qr.add_data(config_text) 
         qr.make(fit=True)
 
         # Создание изображения QR-кода
@@ -218,24 +260,30 @@ async def get_client_configuration(client_id: UUID):
     """
     try:
         # Ищем клиента по ID
-        client = await db.client.find_unique(where={"id": str(client_id)})
+        client = await db.client.find_unique(
+            where={"id": str(client_id)},
+            include={"subnet": True}
+        )
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
-
-        # Ищем подсеть, к которой привязан клиент
-        subnet = await db.subnet.find_unique(where={"id": client.subnetId})
-        if not subnet:
+        if not client.subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
 
+        # Генерация конфигурации
+        config_text = generate_client_config_text(
+            client_ip=client.clientIp,
+            client_private_key_path=client.privateKeyRef,
+            server_public_key=client.publicKey
+        )
+
         # Формируем имя файла
-        file_name = f"configuration_{subnet.name}_{client.name}.conf"
+        file_name = f"configuration_{client.subnet.name}_{client.name}.conf"
 
         # Создаем временный файл
         temp_file = NamedTemporaryFile(delete=False, mode="w", suffix=".conf")
         temp_file_path = temp_file.name
         try:
-            # TODO: change to the real configuration text
-            temp_file.write("Zaglushka" + client.name)  # Пока текст "Заглушка"
+            temp_file.write(config_text) 
         finally:
             temp_file.close()
 
@@ -518,4 +566,4 @@ async def delete_client(client_id: UUID):
         raise HTTPException(status_code=500, detail=f"Error deleting client: {str(e)}")
 
 
-# TODO: make so that IP tables will change too
+
