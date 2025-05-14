@@ -289,7 +289,7 @@ async def create_subnet(data: SubnetCreate):
             raise HTTPException(status_code=400, detail="No usable IPs in this subnet")
 
         first_host_ip = all_hosts[0]
-        firstSubnetIp = f"{first_host_ip}/{data.subnetMask}"
+        firstSubnetIp = f"{first_host_ip}"
         print('check 1')
         update_config_with_subnet_and_iptables({
           'name': data.name,
