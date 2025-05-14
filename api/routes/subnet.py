@@ -290,12 +290,15 @@ async def create_subnet(data: SubnetCreate):
 
         first_host_ip = all_hosts[0]
         firstSubnetIp = f"{first_host_ip}/{data.subnetMask}"
+        print('check 1')
         update_config_with_subnet_and_iptables({
           'name': data.name,
           'subnetIp': firstSubnetIp,
           'subnetMask': data.subnetMask,
           'userId': data.userId
         })
+        print('check 2')
+        
 
         created_subnet = await db.subnet.create(
             data={
