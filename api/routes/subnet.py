@@ -19,6 +19,8 @@ router = APIRouter()
 WG_CONF_DIR = Path("/etc/wireguard")
 WG_CONF_PATH = WG_CONF_DIR / "wg0.conf"
 
+# TODO: check iptables rules via pings (in iptables there's only serverIP not the subnetIP)
+# TODO: restart wg-quick@wg0.service each time the conf file changes
 
 def update_config_with_subnet_and_iptables(data: dict):
     if not WG_CONF_PATH.exists():
@@ -174,11 +176,11 @@ def update_subnet_mask_in_conf(subnet_ip: str, old_mask: int, new_mask: int):
         f.writelines(updated_lines)
 
 
-async def remove_subnet_from_conf(subnet_ip: str, mask: int):
+async def remove_subnet_from_conf(first_usable_subnet_ip: str, subnet_ip: str, mask: int):
     if not WG_CONF_PATH.exists():
         raise HTTPException(status_code=500, detail="wg0.conf not found")
 
-    cidr = f"{subnet_ip}/{mask}"
+    cidr = f"{first_usable_subnet_ip}/{mask}"
 
     with open(WG_CONF_PATH, "r") as f:
         lines = f.readlines()
@@ -211,9 +213,9 @@ async def remove_subnet_from_conf(subnet_ip: str, mask: int):
                 # Remove subnet references only
                 updated_line = (
                     line.replace(f"-s {cidr} -d", "")
-                    .replace(f"-s {subnet_ip} -d {cidr}", "")
+                    .replace(f"-s {first_usable_subnet_ip} -d {cidr}", "")
                     .replace(f"{cidr}", "")
-                    .replace(f"{subnet_ip}", "")
+                    .replace(f"{first_usable_subnet_ip}", "")
                 )
                 updated_lines.append(updated_line)
         else:
@@ -290,14 +292,12 @@ async def create_subnet(data: SubnetCreate):
 
         first_host_ip = all_hosts[0]
         firstSubnetIp = f"{first_host_ip}"
-        print('check 1')
         update_config_with_subnet_and_iptables({
           'name': data.name,
           'subnetIp': firstSubnetIp,
           'subnetMask': data.subnetMask,
           'userId': data.userId
         })
-        print('check 2')
         
 
         created_subnet = await db.subnet.create(
@@ -484,7 +484,7 @@ async def delete_subnet(subnet_id: UUID):
             raise HTTPException(status_code=400, detail=f"Invalid subnet: {str(e)}")
 
         # ✅ Удаляем из конфигурации (Address= и iptables)
-        await remove_subnet_from_conf(subnet_ip=first_usable_ip, mask=subnet.subnetMask)
+        await remove_subnet_from_conf(first_usable_subnet_ip=first_usable_ip, subnet_ip=subnet.subnetIp, mask=subnet.subnetMask)
 
         # ✅ Удаляем из базы
         await db.subnet.delete(where={"id": str(subnet_id)})
