@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def setup_wireguard():
-    WG_CONF_DIR = Path("etc/wireguard")
+    WG_CONF_DIR = Path("/etc/wireguard")
     PRIVATE_KEY_PATH = WG_CONF_DIR / "privatekey"
     PUBLIC_KEY_PATH = WG_CONF_DIR / "publickey"
     WG0_CONF_PATH = WG_CONF_DIR / "wg0.conf"

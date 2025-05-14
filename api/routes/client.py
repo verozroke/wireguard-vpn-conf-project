@@ -33,7 +33,7 @@ DEFAULT_ALLOWED_IPS = "0.0.0.0/0"
 DEFAULT_PERSISTENT_KEEP_ALIVE = 20
 
 
-WG_CONF_DIR = Path("etc/wireguard")
+WG_CONF_DIR = Path("/etc/wireguard")
 WG_CLIENTS_DIR = WG_CONF_DIR / "clients"
 WG_CONF_PATH = WG_CONF_DIR / "wg0.conf"
 WG_SERVER_PUBLIC_KEY_FILE = WG_CONF_DIR / "publickey"

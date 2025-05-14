@@ -16,7 +16,7 @@ from ..models.schemas import (
 )
 
 router = APIRouter()
-WG_CONF_DIR = Path("etc/wireguard")
+WG_CONF_DIR = Path("/etc/wireguard")
 WG_CONF_PATH = WG_CONF_DIR / "wg0.conf"
 
 
