@@ -11,25 +11,20 @@ from passlib.context import CryptContext
 
 load_dotenv()
 
-# Конфигурация для токенов
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Настройка хеширования паролей
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# FastAPI security scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Проверка пароля"""
+def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def hash_password(password: str) -> str:
-    """Хеширование пароля"""
+def hash_password(password):
     return pwd_context.hash(password)
 
 

@@ -81,7 +81,6 @@ async def get_user(user_id: UUID):
     Получить информацию о пользователе по ID.
     """
     try:
-        # Поиск пользователя по ID
         user = await db.user.find_unique(where={"id": str(user_id)})
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -99,7 +98,6 @@ async def register_user(data: UserCreate):
     """
     try:
 
-        # Проверка: существует ли пользователь с таким логином
         existing_user = await db.user.find_unique(where={"login": data.login})
 
         if existing_user:
@@ -112,10 +110,8 @@ async def register_user(data: UserCreate):
             raise HTTPException(
                 status_code=400, detail="Password must not exceed 32 characters"
             )
-        # Хешируем пароль
         hashed_password = hash_password(data.password)
 
-        # Создаем нового пользователя в базе данных
         new_user = await db.user.create(
             data={
                 "login": data.login,
@@ -136,7 +132,6 @@ async def login(data: UserLogin):
     Авторизация пользователя и получение JWT-токена.
     """
     try:
-        # Проверка длины пароля
         if len(data.password) < 8:
             raise HTTPException(
                 status_code=400, detail="Password must be at least 8 characters long"
@@ -146,16 +141,13 @@ async def login(data: UserLogin):
                 status_code=400, detail="Password must not exceed 32 characters"
             )
 
-        # Поиск пользователя по логину
         user = await db.user.find_unique(where={"login": data.login})
         if not user:
             raise HTTPException(status_code=400, detail="Invalid credentials")
 
-        # Проверка правильности пароля
         if not verify_password(data.password, user.password):
             raise HTTPException(status_code=400, detail="Invalid credentials")
 
-        # Генерация токена
         token = create_access_token({"id": user.id, "role": user.role})
 
         return {"access_token": token, "token_type": "bearer"}
@@ -194,16 +186,13 @@ async def change_password(data: UserChangePassword):
     Сменить пароль пользователя.
     """
     try:
-        # Поиск пользователя по ID
         user = await db.user.find_unique(where={"id": str(data.userId)})
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Проверка старого пароля
         if not verify_password(data.oldPassword, user.password):
             raise HTTPException(status_code=400, detail="Incorrect old password")
 
-        # Валидация длины нового пароля
         if len(data.newPassword) < 8:
             raise HTTPException(
                 status_code=400,
@@ -214,10 +203,8 @@ async def change_password(data: UserChangePassword):
                 status_code=400, detail="New password must not exceed 32 characters"
             )
 
-        # Хешируем новый пароль
         hashed_new_password = hash_password(data.newPassword)
 
-        # Обновляем пароль пользователя
         await db.user.update(
             where={"id": str(data.userId)}, data={"password": hashed_new_password}
         )
@@ -236,12 +223,10 @@ async def delete_user(user_id: UUID):
     Удалить пользователя (Только для администраторов).
     """
     try:
-        # Проверка: существует ли пользователь
         user = await db.user.find_unique(where={"id": str(user_id)})
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Удаляем пользователя
         await db.user.delete(where={"id": str(user_id)})
 
         return {"userId": user_id, "status": "deleted"}

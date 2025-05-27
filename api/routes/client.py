@@ -53,16 +53,13 @@ def remove_peer_from_config(public_key: str):
 
     for line in lines:
         if line.strip() == "[Peer]":
-            # Сохраняем предыдущий блок, если он не совпадает
             if current_block and not any(public_key in l for l in current_block):
                 new_lines.extend(current_block)
-            # Начинаем новый блок
             current_block = [line]
             inside_peer_block = True
         elif inside_peer_block:
             current_block.append(line)
             if line.strip() == "" or line.strip().startswith("[Peer]"):
-                # Конец текущего блока — проверим его
                 if not any(public_key in l for l in current_block):
                     new_lines.extend(current_block)
                 current_block = []
@@ -71,11 +68,9 @@ def remove_peer_from_config(public_key: str):
         else:
             new_lines.append(line)
 
-    # Если после последней итерации остался блок — проверь его
     if current_block and not any(public_key in l for l in current_block):
         new_lines.extend(current_block)
 
-    # Перезаписываем конфиг
     with open(WG_CONF_PATH, "w") as f:
         f.writelines(new_lines)
 
@@ -118,7 +113,6 @@ def update_allowed_ips_in_config(public_key: str, new_ip: str, subnet_mask: int)
             continue
 
         if inside_peer and stripped.startswith("AllowedIPs") and found_peer:
-            # Заменяем AllowedIPs строку
             new_lines.append(f"AllowedIPs = {new_ip}/{subnet_mask}\n")
             inside_peer = False
             found_peer = False
@@ -167,7 +161,6 @@ async def get_clients():
     Получить список всех клиентов (Только для администраторов).
     """
     try:
-        # Получаем всех клиентов из базы данных
         clients = await db.client.find_many(include={"user": True, "subnet": True})
 
         return [] if not clients else clients
@@ -200,7 +193,6 @@ async def get_client(client_id: UUID):
     Получить информацию о клиенте по ID.
     """
     try:
-        # Ищем клиента по ID
         client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
@@ -215,7 +207,6 @@ async def get_client_qrcode(client_id: UUID):
     Получить QR-код для клиента.
     """
     try:
-        # Ищем клиента по ID
         client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
@@ -241,15 +232,12 @@ async def get_client_qrcode(client_id: UUID):
         qr.add_data(config_text)
         qr.make(fit=True)
 
-        # Создание изображения QR-кода
         img = qr.make_image(fill="black", back_color="white")
 
-        # Сохраняем изображение в байтовый поток
         buffer = BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
 
-        # Конвертируем изображение в Base64
         img_base64 = base64.b64encode(buffer.read()).decode("utf-8")
 
         return {"client_id": client_id, "qrcode": img_base64}
@@ -266,7 +254,6 @@ async def get_client_configuration(client_id: UUID):
     Получить конфигурацию клиента в виде файла.
     """
     try:
-        # Ищем клиента по ID
         client = await db.client.find_unique(
             where={"id": str(client_id)}, include={"subnet": True}
         )
@@ -275,23 +262,19 @@ async def get_client_configuration(client_id: UUID):
         if not client.subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
 
-        # Читаем публичный ключ сервера из файла
         try:
             with open(WG_SERVER_PUBLIC_KEY_FILE, "r") as f:
                 server_public_key = f.read().strip()
         except Exception:
             raise HTTPException(status_code=500, detail="Server public key not found")
-        # Генерация конфигурации
         config_text = generate_client_config_text(
             client_ip=client.clientIp,
             client_private_key_path=client.privateKeyRef,
             server_public_key=server_public_key,
         )
 
-        # Формируем имя файла
         file_name = f"configuration_{client.subnet.name}_{client.name}.conf"
 
-        # Создаем временный файл
         temp_file = NamedTemporaryFile(delete=False, mode="w", suffix=".conf")
         temp_file_path = temp_file.name
         try:
@@ -299,10 +282,8 @@ async def get_client_configuration(client_id: UUID):
         finally:
             temp_file.close()
 
-        # Создаем фоновую задачу на удаление файла после отправки
         background_task = BackgroundTask(os.remove, temp_file_path)
 
-        # Отправляем файл и привязываем удаление после отправки
         return FileResponse(
             path=temp_file_path,
             filename=file_name,
@@ -311,7 +292,6 @@ async def get_client_configuration(client_id: UUID):
         )
 
     except Exception as e:
-        # В случае ошибки, если файл был создан, удаляем его
         if "temp_file_path" in locals() and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
         raise HTTPException(
@@ -325,12 +305,10 @@ async def create_client(client: ClientCreate):
     Создать нового клиента.
     """
     try:
-        # Проверяем существование подсети
         subnet = await db.subnet.find_unique(where={"id": str(client.subnetId)})
         if not subnet:
             raise HTTPException(status_code=404, detail="Subnet not found")
 
-        # Валидация IP-адреса
         try:
             network = ipaddress.IPv4Network(
                 f"{subnet.subnetIp}/{subnet.subnetMask}", strict=True
@@ -352,7 +330,6 @@ async def create_client(client: ClientCreate):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid IP address: {str(e)}")
 
-        # 1. Создаём клиента в БД с временными значениями
         created_client = await db.client.create(
             data={
                 "name": client.name,
@@ -365,7 +342,6 @@ async def create_client(client: ClientCreate):
             include={"user": True, "subnet": True},
         )
 
-        # 2. Генерация ключей и сохранение в файлы
         client_dir = WG_CLIENTS_DIR / created_client.id
         client_dir.mkdir(parents=True, exist_ok=True)
 
@@ -382,7 +358,6 @@ async def create_client(client: ClientCreate):
         private_key_path.write_text(private_key)
         public_key_path.write_text(public_key)
 
-        # 3. Добавление в конфигурацию wg0.conf
         peer_config = f"""
 
 [Peer]
@@ -392,7 +367,6 @@ AllowedIPs = {client.clientIp}/{subnet.subnetMask}
         with open(WG_CONF_PATH, "a") as f:
             f.write(peer_config)
 
-        # 4. Обновляем клиента с реальными данными
         updated_client = await db.client.update(
             where={"id": created_client.id},
             data={"publicKey": public_key, "privateKeyRef": str(private_key_path)},
@@ -418,10 +392,8 @@ async def enable_client(data: ClientEnableDisable):
             raise HTTPException(status_code=404, detail="Client not found")
         if client.isEnabled:
             raise HTTPException(status_code=400, detail="Client is already enabled")
-        # ✅ Добавляем клиента как PEER
         add_peer_to_config(client.publicKey, client.clientIp, client.subnet.subnetMask)
 
-        # Обновляем флаг в БД
         updated_client = await db.client.update(
             where={"id": str(data.clientId)}, data={"isEnabled": True}
         )
@@ -444,7 +416,6 @@ async def disable_client(data: ClientEnableDisable):
         if not client.isEnabled:
             raise HTTPException(status_code=400, detail="Client is already disabled")
 
-        # ✅ Удаляем клиента из wg0.conf
         remove_peer_from_config(client.publicKey)
 
         updated_client = await db.client.update(
@@ -466,12 +437,10 @@ async def update_client_name(client_id: UUID, data: ClientUpdateName):
     Обновить имя клиента .
     """
     try:
-        # Ищем клиента по ID
         client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-        # Обновляем имя клиента в базе данных
         updated_client = await db.client.update(
             where={"id": str(client_id)},
             data={"name": data.name},
@@ -495,7 +464,6 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
     Обновить IP-адрес клиента .
     """
     try:
-        # Ищем клиента по ID
         client = await db.client.find_unique(
             where={"id": str(client_id)}, include={"subnet": True}
         )
@@ -503,7 +471,6 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
             raise HTTPException(status_code=404, detail="Client not found")
 
         try:
-            # Сеть клиента (по его подсети)
             subnet_network = ipaddress.IPv4Network(
                 f"{client.subnet.subnetIp}/{client.subnet.subnetMask}", strict=True
             )
@@ -531,11 +498,9 @@ async def update_client_address(client_id: UUID, data: ClientUpdateAddress):
             raise HTTPException(
                 status_code=400, detail=f"Invalid client IP address: {str(e)}"
             )
-        # Обновляем IP-адрес в конфигурации
         update_allowed_ips_in_config(
             client.publicKey, data.clientIp, client.subnet.subnetMask
         )
-        # Обновляем IP-адрес клиента в базе данных
         updated_client = await db.client.update(
             where={"id": str(client_id)},
             data={"clientIp": data.clientIp},
@@ -556,20 +521,16 @@ async def delete_client(client_id: UUID):
     Удалить клиента (Только для администраторов).
     """
     try:
-        # Ищем клиента по ID
         client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
 
-        # ✅ Удаляем PEER из wg0.conf по publicKey
         remove_peer_from_config(client.publicKey)
 
-        # 2. Удаляем ключи
         client_key_dir = WG_CLIENTS_DIR / str(client_id)
         if client_key_dir.exists():
             shutil.rmtree(client_key_dir)
 
-        # Удаляем клиента из базы данных
         await db.client.delete(where={"id": str(client_id)})
 
         return {"clientId": str(client_id), "status": "deleted"}

@@ -8,8 +8,6 @@ from api import router
 from api.models.db import db
 from wireguard.setup import setup_wireguard
 
-# TODO: change the project directory structure of API routes
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,13 +29,12 @@ app = FastAPI(title="Diploma Project", lifespan=lifespan)
 
 origins = ["http://127.0.0.1:3000", "https://wg-vpn-panel.vercel.app"]
 
-# Добавляем CORS миддлвару
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # откуда можно отправлять запросы
-    allow_credentials=True,  # разрешать куки, авторизацию и т.д.
-    allow_methods=["*"],  # разрешить все методы (GET, POST, PUT и т.д.)
-    allow_headers=["*"],  # разрешить все заголовки
+    allow_origins=origins,  
+    allow_credentials=True, 
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
 
 

@@ -5,6 +5,6 @@ services:
     ports:
       - 5433:5432
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: DB_NAME_EXAMPLE
+      POSTGRES_USER: USERNAME_EXAMPLE
+      POSTGRES_PASSWORD: PASSWORD_EXAMPLE

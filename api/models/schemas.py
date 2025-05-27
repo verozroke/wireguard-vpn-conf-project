@@ -60,7 +60,6 @@ class ClientResponse(ClientBase):
 
 class ClientEnableDisable(BaseModel):
     clientId: UUID
-    #! deleted userId
 
 
 class ClientUpdateName(BaseModel):
