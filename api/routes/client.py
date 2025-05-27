@@ -210,9 +210,9 @@ async def get_client_qrcode(client_id: UUID):
         client = await db.client.find_unique(where={"id": str(client_id)})
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
-          
+
         try:
-          with open(WG_SERVER_PUBLIC_KEY_FILE, "r") as f:
+            with open(WG_SERVER_PUBLIC_KEY_FILE, "r") as f:
                 server_public_key = f.read().strip()
         except Exception:
             raise HTTPException(status_code=500, detail="Server public key not found")
@@ -222,7 +222,7 @@ async def get_client_qrcode(client_id: UUID):
             client_private_key_path=client.privateKeyRef,
             server_public_key=server_public_key,
         )
-        
+
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_L,

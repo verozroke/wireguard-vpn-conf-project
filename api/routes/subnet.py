@@ -169,7 +169,9 @@ def update_subnet_mask_in_conf(subnet_ip: str, old_mask: int, new_mask: int):
         f.writelines(updated_lines)
 
 
-async def remove_subnet_from_conf(first_usable_subnet_ip: str, subnet_ip: str, mask: int):
+async def remove_subnet_from_conf(
+    first_usable_subnet_ip: str, subnet_ip: str, mask: int
+):
     if not WG_CONF_PATH.exists():
         raise HTTPException(status_code=500, detail="wg0.conf not found")
 
@@ -258,7 +260,9 @@ async def create_subnet(data: SubnetCreate):
             )
 
         try:
-            network = ipaddress.IPv4Network(f"{data.subnetIp}/{data.subnetMask}", strict=True)
+            network = ipaddress.IPv4Network(
+                f"{data.subnetIp}/{data.subnetMask}", strict=True
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid subnet IP: {str(e)}")
 
@@ -280,13 +284,14 @@ async def create_subnet(data: SubnetCreate):
 
         first_host_ip = all_hosts[0]
         firstSubnetIp = f"{first_host_ip}"
-        update_config_with_subnet_and_iptables({
-          'name': data.name,
-          'subnetIp': firstSubnetIp,
-          'subnetMask': data.subnetMask,
-          'userId': data.userId
-        })
-        
+        update_config_with_subnet_and_iptables(
+            {
+                "name": data.name,
+                "subnetIp": firstSubnetIp,
+                "subnetMask": data.subnetMask,
+                "userId": data.userId,
+            }
+        )
 
         created_subnet = await db.subnet.create(
             data={
@@ -346,8 +351,12 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
             )
 
         try:
-            old_network = ipaddress.IPv4Network(f"{subnet.subnetIp}/{subnet.subnetMask}", strict=True)
-            new_network = ipaddress.IPv4Network(f"{data.subnetIp}/{subnet.subnetMask}", strict=True)
+            old_network = ipaddress.IPv4Network(
+                f"{subnet.subnetIp}/{subnet.subnetMask}", strict=True
+            )
+            new_network = ipaddress.IPv4Network(
+                f"{data.subnetIp}/{subnet.subnetMask}", strict=True
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid subnet IP: {str(e)}")
 
@@ -355,9 +364,7 @@ async def update_subnet_ip(subnet_id: UUID, data: SubnetUpdateSubnetIp):
         new_first_ip = str(list(new_network.hosts())[0])
 
         update_subnet_ip_in_conf(
-            old_ip=old_first_ip,
-            new_ip=new_first_ip,
-            mask=subnet.subnetMask
+            old_ip=old_first_ip, new_ip=new_first_ip, mask=subnet.subnetMask
         )
 
         updated_subnet = await db.subnet.update(
@@ -408,8 +415,10 @@ async def update_subnet_mask(subnet_id: UUID, data: SubnetUpdateSubnetMask):
                 status_code=400,
                 detail="Your new subnet mask is not compatible with subnetIP. Change the SubnetIp",
             )
-            
-        first_ip = str(list(old_network.hosts())[0])  # или new_network.hosts()[0], по сути одинаково
+
+        first_ip = str(
+            list(old_network.hosts())[0]
+        )  # или new_network.hosts()[0], по сути одинаково
 
         update_subnet_mask_in_conf(
             subnet_ip=first_ip,
@@ -455,7 +464,11 @@ async def delete_subnet(subnet_id: UUID):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid subnet: {str(e)}")
 
-        await remove_subnet_from_conf(first_usable_subnet_ip=first_usable_ip, subnet_ip=subnet.subnetIp, mask=subnet.subnetMask)
+        await remove_subnet_from_conf(
+            first_usable_subnet_ip=first_usable_ip,
+            subnet_ip=subnet.subnetIp,
+            mask=subnet.subnetMask,
+        )
         await db.subnet.delete(where={"id": str(subnet_id)})
 
         return {"subnetId": subnet_id, "status": "deleted"}
