@@ -1,13 +1,14 @@
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 # User Schemas
 
 
 class UserCreate(BaseModel):
     login: str
+    email: str
     password: str
     is_admin: bool
 
@@ -15,11 +16,13 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     login: str
     password: str
+    email: str
 
 
 class UserResponse(BaseModel):
     id: UUID
     login: str
+    email: str
     role: str
 
 
@@ -107,3 +110,11 @@ class SubnetUpdateSubnetMask(BaseModel):
 
 class SubnetDelete(BaseModel):
     subnetId: UUID
+
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+class VerifyRequest(BaseModel):
+    email: EmailStr
+    code: str

@@ -1,7 +1,7 @@
 generator client {
   provider             = "prisma-client-py"
-  recursive_type_depth = "5"
   interface            = "asyncio"
+  recursive_type_depth = "5"
 }
 
 datasource db {
@@ -14,8 +14,9 @@ model User {
   login    String   @unique
   password String
   role     Role
-  subnets  Subnet[] @relation("SubnetToUser")
+  email    String   @unique
   clients  Client[] @relation("UserToClient")
+  subnets  Subnet[] @relation("SubnetToUser")
 }
 
 model Subnet {
@@ -23,9 +24,9 @@ model Subnet {
   name       String
   subnetIp   String   @unique
   subnetMask Int
-  clients    Client[] @relation("SubnetToClient")
   userId     String
-  user       User     @relation(fields: [userId], references: [id], "SubnetToUser")
+  clients    Client[] @relation("SubnetToClient")
+  user       User     @relation("SubnetToUser", fields: [userId], references: [id])
 }
 
 model Client {
@@ -36,9 +37,9 @@ model Client {
   privateKeyRef String
   isEnabled     Boolean @default(true)
   subnetId      String
-  subnet        Subnet  @relation(fields: [subnetId], references: [id], "SubnetToClient")
   userId        String
-  user          User    @relation(fields: [userId], references: [id], "UserToClient")
+  subnet        Subnet  @relation("SubnetToClient", fields: [subnetId], references: [id])
+  user          User    @relation("UserToClient", fields: [userId], references: [id])
 }
 
 enum Role {
